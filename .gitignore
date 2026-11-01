@@ -1,0 +1,4 @@
+/rewards
+*.env
+!example.env
+next-session.md
