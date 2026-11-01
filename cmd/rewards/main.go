@@ -130,9 +130,17 @@ func run() error {
 			origins = append(origins, o)
 		}
 	}
+	var verse *api.Verse
+	if u := env("REWARDS_VERSE_URL", ""); u != "" {
+		vk, err := secret("REWARDS_VERSE_KEY")
+		if err != nil {
+			return err
+		}
+		verse = &api.Verse{URL: u, Key: vk, PublicURL: env("REWARDS_PUBLIC_URL", "https://rewards.openpak.org")}
+	}
 	srv := &http.Server{
 		Addr:              env("REWARDS_HTTP_ADDR", "127.0.0.1:20180"),
-		Handler:           (&api.Server{Store: st, Core: cc, Dir: cc, EventsKey: eventsKey, InternalKey: webKey, AdminKey: adminKey, CORS: origins, RatePerMin: 120}).Handler(),
+		Handler:           (&api.Server{Store: st, Core: cc, Dir: cc, EventsKey: eventsKey, InternalKey: webKey, AdminKey: adminKey, CORS: origins, RatePerMin: 120, Verse: verse}).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       60 * time.Second,
 		WriteTimeout:      60 * time.Second,

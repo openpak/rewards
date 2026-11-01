@@ -220,3 +220,12 @@ Microsoft art, logos, characters or console imitations; correct size for each pl
 - **Shop**: `GET /v1/me/catalog`, previews from `/v1/items/{id}/preview`, `POST /v1/me/redeem`.
 - **Inventory**: `GET /v1/me/inventory`, equip with `PUT /v1/me/equipped/{slot}`, settings toggle for the showcase.
 - **Admin**: the table above; a flags queue first, account lookup second, catalogue and missions third.
+
+## OpenVerse activity posts
+
+If `REWARDS_VERSE_URL` and `REWARDS_VERSE_KEY[_FILE]` are set, a badge that reaches an account (redeemed in the shop, claimed
+as a mission reward, or granted by an admin or the event/supporter grant API) is reported to OpenVerse's
+`POST /internal/v1/activity` with category `badge`, the badge name, a link to `https://openpak.org/account/rewards` and the badge
+preview (`REWARDS_PUBLIC_URL`/v1/items/{id}/preview). The `event_id` is `badge:<account>:<item>:<why>` where why is the
+redemption id, the mission and period, or `g` for a grant, so a retry never posts twice. Nothing is posted unless the player
+turned activity posts on in OpenVerse. A failure is logged and never fails the request. Items of other kinds are not reported.

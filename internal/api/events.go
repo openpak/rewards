@@ -260,6 +260,11 @@ func (s *Server) adminGrants(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	for _, g := range res {
+		if g.Status == "granted" {
+			s.badgeEarned(g.AccountID, in.ItemID, "g")
+		}
+	}
 	out(w, 200, map[string]any{"results": res, "unknown": unknown})
 }
 

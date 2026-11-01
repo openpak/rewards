@@ -42,6 +42,7 @@ type Server struct {
 	AdminKey    string   // admin routes (X-Admin-Key)
 	CORS        []string // origins allowed to call /v1 from a browser
 	RatePerMin  int
+	Verse       *Verse // optional: OpenVerse activity posts for badges earned
 
 	mu      sync.Mutex
 	buckets map[string]*bucket
@@ -359,6 +360,9 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request, me string) {
 		fail(w, err)
 		return
 	}
+	if res.Item != "" {
+		s.badgeEarned(me, res.Item, "m"+res.MissionID+":"+res.Period)
+	}
 	out(w, 200, res)
 }
 
@@ -388,6 +392,7 @@ func (s *Server) redeem(w http.ResponseWriter, r *http.Request, me string) {
 		fail(w, err)
 		return
 	}
+	s.badgeEarned(me, res.ItemID, "r"+strconv.FormatInt(res.ID, 10))
 	out(w, 201, res)
 }
 
@@ -621,9 +626,14 @@ func (s *Server) adminGrant(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &in) {
 		return
 	}
-	if err := s.Store.AdminGrant(r.Context(), actor(r), strings.ToLower(r.PathValue("id")), in.ItemID); err != nil {
+	acct := strings.ToLower(r.PathValue("id"))
+	had, _ := s.Store.Owns(r.Context(), acct, in.ItemID)
+	if err := s.Store.AdminGrant(r.Context(), actor(r), acct, in.ItemID); err != nil {
 		fail(w, err)
 		return
+	}
+	if !had {
+		s.badgeEarned(acct, in.ItemID, "g")
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
