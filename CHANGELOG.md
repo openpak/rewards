@@ -2,13 +2,13 @@
 
 `git log` stays the source of truth; this file is the readable summary.
 
-## 0.3.0
+## 0.3.1
 
 - OpenVerse activity posts: when an account receives a badge (shop purchase, mission reward, admin or event grant),
   the service tells OpenVerse (`POST /internal/v1/activity`), fire and forget with retries. OpenVerse only posts for
   players who opted in. Off unless `REWARDS_VERSE_URL` and `REWARDS_VERSE_KEY` are set.
 
-## 0.3.0
+## 0.3.1
 
 - Kart, Turf and Brawl ladders, per-game firsts and Collectors now count online sessions per game
   (`kart_sessions.*`, `turf_sessions.*`, `brawl_sessions.*`, distinct by session id) instead of finished
