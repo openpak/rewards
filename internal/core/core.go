@@ -11,11 +11,15 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
+	"sync"
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 
 	accountv1 "github.com/openpak/account-api/openpak/account/v1"
 )
@@ -26,6 +30,8 @@ var ErrUnauthenticated = errors.New("core: not signed in")
 type Client struct {
 	Identity accountv1.IdentityClient
 	Sessions accountv1.SessionsClient
+	Links    accountv1.LinksClient
+	Social   accountv1.SocialClient
 	Events   accountv1.EventsClient
 	Key      string
 	HTTPURL  string
@@ -42,6 +48,8 @@ func Dial(grpcAddr, httpURL, key string) (*Client, error) {
 	return &Client{
 		Identity: accountv1.NewIdentityClient(conn),
 		Sessions: accountv1.NewSessionsClient(conn),
+		Links:    accountv1.NewLinksClient(conn),
+		Social:   accountv1.NewSocialClient(conn),
 		Events:   accountv1.NewEventsClient(conn),
 		Key:      key, HTTPURL: httpURL,
 		HTTP: &http.Client{Timeout: 5 * time.Second},
@@ -186,4 +194,104 @@ func (c *Client) followOnce(ctx context.Context, h Handler) error {
 			saved = time.Now()
 		}
 	}
+}
+
+// ErrNoLink is a network identity no active account owns.
+var ErrNoLink = errors.New("core: no account for that identity")
+
+type cached struct {
+	val string
+	exp time.Time
+}
+
+var (
+	cacheMu sync.Mutex
+	cache   = map[string]cached{}
+)
+
+func cacheGet(k string) (string, bool) {
+	cacheMu.Lock()
+	defer cacheMu.Unlock()
+	c, ok := cache[k]
+	if !ok || time.Now().After(c.exp) {
+		return "", false
+	}
+	return c.val, true
+}
+
+func cachePut(k, v string, ttl time.Duration) {
+	cacheMu.Lock()
+	defer cacheMu.Unlock()
+	if len(cache) > 50000 {
+		cache = map[string]cached{}
+	}
+	cache[k] = cached{v, time.Now().Add(ttl)}
+}
+
+// Resolve maps a network identity (adapter namespace and subject: Wii U/3DS PID, Switch BAAS
+// user id, WFC user id, PSN or Xbox id) to the core account through the Links service. Active
+// links only; answers are cached for ten minutes.
+func (c *Client) Resolve(ctx context.Context, namespace, subject string) (string, error) {
+	if namespace == "switch" {
+		subject = strings.ToLower(subject)
+	}
+	k := namespace + "\x00" + subject
+	if v, ok := cacheGet(k); ok {
+		return v, nil
+	}
+	// A Wii U and a 3DS share one PID space, and the adapter registers the link under
+	// whichever console created the account, so try the sibling namespace too.
+	try := []string{namespace}
+	switch namespace {
+	case "wiiu":
+		try = append(try, "3ds")
+	case "3ds":
+		try = append(try, "wiiu")
+	}
+	for _, ns := range try {
+		rctx, cancel := context.WithTimeout(c.ctx(ctx), 5*time.Second)
+		resp, err := c.Links.GetLinkBySubject(rctx, &accountv1.GetLinkBySubjectRequest{Namespace: ns, SubjectId: subject})
+		cancel()
+		if status.Code(err) == codes.NotFound {
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		if resp.GetState() != accountv1.LinkState_LINK_STATE_ACTIVE || resp.GetAccountId() == "" {
+			continue
+		}
+		cachePut(k, resp.GetAccountId(), 10*time.Minute)
+		return resp.GetAccountId(), nil
+	}
+	return "", ErrNoLink
+}
+
+// Friends is the set of accepted friends of an account.
+func (c *Client) Friends(ctx context.Context, account string) (map[string]bool, error) {
+	rctx, cancel := context.WithTimeout(c.ctx(ctx), 5*time.Second)
+	defer cancel()
+	resp, err := c.Social.ListFriends(rctx, &accountv1.ListFriendsRequest{AccountId: account})
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]bool{}
+	for _, f := range resp.GetFriends() {
+		out[strings.ToLower(f.GetAccountId())] = true
+	}
+	return out, nil
+}
+
+// ResolveHandle maps a public handle to its account id.
+func (c *Client) ResolveHandle(ctx context.Context, handle string) (string, error) {
+	rctx, cancel := context.WithTimeout(c.ctx(ctx), 5*time.Second)
+	defer cancel()
+	resp, err := c.Identity.ResolveHandle(rctx, &accountv1.ResolveHandleRequest{Handle: handle})
+	if status.Code(err) == codes.NotFound {
+		return "", ErrNoLink
+	}
+	if err != nil {
+		return "", err
+	}
+	return resp.GetAccountId(), nil
 }

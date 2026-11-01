@@ -296,7 +296,7 @@ func (s *Store) SetFrozen(ctx context.Context, acct string, frozen bool, actor s
 	})
 }
 
-var purgeTables = []string{"accounts", "ledger", "play_cursor", "daily_earn", "activity", "titles_credited", "mission_progress", "redemptions", "equipped", "flags"}
+var purgeTables = []string{"accounts", "ledger", "play_cursor", "daily_earn", "activity", "titles_credited", "mission_progress", "metric_counts", "metric_daily", "metric_keys", "events", "redemptions", "equipped", "flags"}
 
 // Purge erases everything held about an account: the user's own DELETE /v1/me and the core's
 // account_deleted event. The audit trail keeps only the admin actions, which name the id.
@@ -328,6 +328,8 @@ func (s *Store) PurgeStale(ctx context.Context) error {
 	if _, err := s.pool.Exec(ctx, `DELETE FROM play_cursor WHERE seen_at < now() - interval '180 days'`); err != nil {
 		return err
 	}
-	_, err := s.pool.Exec(ctx, `DELETE FROM daily_earn WHERE day < current_date - 90`)
-	return err
+	if _, err := s.pool.Exec(ctx, `DELETE FROM daily_earn WHERE day < current_date - 90`); err != nil {
+		return err
+	}
+	return s.purgeEvents(ctx)
 }

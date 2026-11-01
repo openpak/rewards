@@ -82,6 +82,10 @@ func run() error {
 	if err != nil || len(adminKey) < 32 || adminKey == webKey {
 		return errors.New("rewards: REWARDS_ADMIN_KEY (or _FILE) of at least 32 characters, different from the internal key, is required")
 	}
+	eventsKey, err := secret("REWARDS_EVENTS_KEY")
+	if err != nil || (eventsKey != "" && (len(eventsKey) < 32 || eventsKey == webKey || eventsKey == adminKey)) {
+		return errors.New("rewards: REWARDS_EVENTS_KEY (or _FILE), when set, must be at least 32 characters and differ from the other keys")
+	}
 	interval, err := time.ParseDuration(env("REWARDS_POLL_INTERVAL", "5m"))
 	if err != nil || interval < 30*time.Second {
 		return errors.New("rewards: REWARDS_POLL_INTERVAL must be a Go duration of at least 30s")
@@ -128,7 +132,7 @@ func run() error {
 	}
 	srv := &http.Server{
 		Addr:              env("REWARDS_HTTP_ADDR", "127.0.0.1:20180"),
-		Handler:           (&api.Server{Store: st, Core: cc, InternalKey: webKey, AdminKey: adminKey, CORS: origins, RatePerMin: 120}).Handler(),
+		Handler:           (&api.Server{Store: st, Core: cc, Dir: cc, EventsKey: eventsKey, InternalKey: webKey, AdminKey: adminKey, CORS: origins, RatePerMin: 120}).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       60 * time.Second,
 		WriteTimeout:      60 * time.Second,

@@ -87,6 +87,12 @@ func (s *Store) metricValue(ctx context.Context, d q, acct string, m Mission, no
 		err := d.QueryRow(ctx, `SELECT lifetime_play_seconds FROM accounts WHERE account_id=$1`, acct).Scan(&n)
 		return n, err
 	}
+	switch m.Metric {
+	case "play_seconds", "play_days", "titles_played", "networks_played", "sessions":
+	default:
+		v, _, err := eventValue(ctx, d, acct, m.Metric)
+		return v, err
+	}
 	var secs, sess, days, titles, nets int64
 	err := d.QueryRow(ctx, `SELECT COALESCE(SUM(seconds),0), COALESCE(SUM(sessions),0), COUNT(DISTINCT day), COUNT(DISTINCT title_id), COUNT(DISTINCT network)
 		FROM activity WHERE account_id=$1 AND ($2::date IS NULL OR day >= $2) AND ($3::date IS NULL OR day < $3) AND ($4='' OR network=$4) AND ($5='' OR title_id=$5)`,
@@ -281,6 +287,10 @@ func (s *Store) Claim(ctx context.Context, acct, id, period string) (ClaimResult
 				res.Item = *m.RewardItem
 			}
 		}
+		// The next tier of a ladder may already be earned: show it now.
+		if err := s.refreshMissions(ctx, tx, acct, now); err != nil {
+			return err
+		}
 		return tx.QueryRow(ctx, `SELECT balance FROM accounts WHERE account_id=$1`, acct).Scan(&res.Balance)
 	})
 	return res, err
@@ -295,6 +305,9 @@ func (s *Store) UpsertMission(ctx context.Context, actor string, m Mission) erro
 		return invalid("reward_points must be 0..1000")
 	}
 	return s.tx(ctx, func(tx pgx.Tx) error {
+		if !validMetric(ctx, tx, m.Metric) {
+			return invalid("unknown metric")
+		}
 		if m.RewardItem != nil {
 			var n int
 			if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM items WHERE id=$1`, *m.RewardItem).Scan(&n); err != nil || n == 0 {

@@ -26,9 +26,18 @@ type Identity interface {
 	Whoami(ctx context.Context, bearer string) (string, error)
 }
 
+// Directory is the account core's identity side: network identities, friends, handles.
+type Directory interface {
+	Resolve(ctx context.Context, namespace, subject string) (string, error)
+	Friends(ctx context.Context, account string) (map[string]bool, error)
+	ResolveHandle(ctx context.Context, handle string) (string, error)
+}
+
 type Server struct {
 	Store       *store.Store
 	Core        Identity
+	Dir         Directory
+	EventsKey   string   // game servers (X-Internal-Key on POST /internal/v1/events only); the internal key also works
 	InternalKey string   // website and adapters (X-Internal-Key)
 	AdminKey    string   // admin routes (X-Admin-Key)
 	CORS        []string // origins allowed to call /v1 from a browser
@@ -77,6 +86,11 @@ func (s *Server) Handler() http.Handler {
 	i("GET /internal/v1/adapter/entitlements", s.entitlements)
 	i("GET /internal/v1/adapter/items/{id}/asset", s.adapterAsset)
 
+	// Game servers: the only way a count moves.
+	mux.HandleFunc("POST /internal/v1/events", s.eventsAuth(s.events))
+	mux.HandleFunc("GET /v1/metrics", s.metrics)
+	u("GET /v1/me/metrics", s.myMetrics)
+
 	// Admin.
 	a := func(p string, h http.HandlerFunc) { mux.HandleFunc(p, s.keyed(s.AdminKey, "X-Admin-Key", true, h)) }
 	a("GET /internal/v1/admin/items", s.catalog(true))
@@ -93,6 +107,12 @@ func (s *Server) Handler() http.Handler {
 	a("POST /internal/v1/admin/accounts/{id}/unfreeze", s.adminFreeze(false))
 	a("POST /internal/v1/admin/accounts/{id}/grant", s.adminGrant)
 	a("POST /internal/v1/admin/redemptions/{id}/revoke", s.adminRevoke)
+	a("GET /internal/v1/admin/metrics", s.metrics)
+	a("PUT /internal/v1/admin/metrics/{id}", s.adminMetric)
+	a("POST /internal/v1/admin/accounts/{id}/metrics/{metric}/release", s.adminMetricHeld(true))
+	a("POST /internal/v1/admin/accounts/{id}/metrics/{metric}/discard", s.adminMetricHeld(false))
+	a("POST /internal/v1/admin/grants", s.adminGrants)
+	a("GET /internal/v1/admin/grants", s.adminGrantList)
 	a("GET /internal/v1/admin/flags", s.adminFlags)
 	a("POST /internal/v1/admin/flags/{id}/resolve", s.adminResolve)
 	a("GET /internal/v1/admin/audit", s.adminAudit)

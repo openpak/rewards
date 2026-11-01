@@ -20,6 +20,8 @@ const (
 	admin = "cccccccc-0000-0000-0000-000000000003"
 	ikey  = "internal-key-internal-key-internal-key"
 	akey  = "admin-key-admin-key-admin-key-admin-k"
+	ekey  = "events-key-events-key-events-key-ev"
+	bob   = "bbbbbbbb-0000-0000-0000-000000000002"
 )
 
 type ident map[string]string
@@ -48,7 +50,7 @@ func setup(t *testing.T) (*httptest.Server, *store.Store) {
 		t.Fatal(err)
 	}
 	t.Cleanup(s.Close)
-	srv := httptest.NewServer((&Server{Store: s, Core: ident{"tok-alice": alice}, InternalKey: ikey, AdminKey: akey, RatePerMin: 1000}).Handler())
+	srv := httptest.NewServer((&Server{Store: s, Core: ident{"tok-alice": alice}, Dir: fakeDir{}, EventsKey: ekey, InternalKey: ikey, AdminKey: akey, RatePerMin: 1000}).Handler())
 	t.Cleanup(srv.Close)
 	return srv, s
 }

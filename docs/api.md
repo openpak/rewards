@@ -61,13 +61,17 @@ Preview image: `GET /v1/items/{id}/preview`.
 
 `kind`: `daily` `weekly` `once` `series` (a step unlocked when `requires` is claimed). `metric` and `target`:
 `play_seconds` (seconds), `play_days`, `titles_played`, `networks_played`, `friends_added`, `sessions`,
-`lifetime_play_seconds`. Seconds are for the website to show as minutes or hours.
+`lifetime_play_seconds`, or a server-fed count (`kart_races_completed`, `trades_completed`, ...; see
+[metrics.md](metrics.md)). Seconds are for the website to show as minutes or hours. Ladder missions are
+`series` steps; the next tier shows `locked: true` until the previous one is claimed. Show a ladder as its
+list of tiers (`id` prefix, `target`); `GET /v1/me/metrics` gives the running count.
 
 ## Anonymous
 
 | Route | Answer |
 | --- | --- |
 | `GET /healthz` | `ok` |
+| `GET /v1/metrics` | `{"metrics":[{id,family,title,mode,daily_cap,max_delta,require_friend,enabled}]}` |
 | `GET /v1/catalog?kind=&platform=` | `{"items":[Item]}`: active items on sale now (no ownership info) |
 | `GET /v1/missions` | `{"missions":[Mission]}`: active missions in their window |
 | `GET /v1/items/{id}/preview` | the preview image of an active item (`Content-Type` as uploaded, cacheable 1 h); 404 otherwise |
@@ -88,6 +92,10 @@ Preview image: `GET /v1/items/{id}/preview`.
 `last_poll_at` is when the service last read this account's play time (about every 5 minutes), so a
 fresh session can take up to one interval to show up. `frozen` means the account earns and redeems
 nothing (banned or frozen by an admin). `paused` is the person's own opt-out.
+
+### `GET /v1/me/metrics`
+
+`{"counts":{"kart_races_completed.mk8":3,"trades_completed":12}}`: the caller's server-observed counts.
 
 ### `GET /v1/me/ledger?before=<id>&limit=<1-200>`
 
@@ -186,7 +194,7 @@ For the website's `/admin/rewards` page.
 | Route | What |
 | --- | --- |
 | `GET /internal/v1/admin/stats` | `{accounts, points_issued, points_spent, issued_today, redemptions_by_item, open_flags, frozen_accounts}` |
-| `GET /internal/v1/admin/flags?all=1&limit=` | abuse queue (open only unless `all=1`): `{flags:[{id, account_id, reason, detail, raised_at, resolved_by, resolved_at}]}`; reasons `play-cap-streak`, `elapsed-clamp` |
+| `GET /internal/v1/admin/flags?all=1&limit=` | abuse queue (open only unless `all=1`): `{flags:[{id, account_id, reason, detail, raised_at, resolved_by, resolved_at}]}`; reasons `play-cap-streak`, `elapsed-clamp`, `metric-cap:<metric>` (a daily event cap was hit; release or discard the held events) |
 | `POST /internal/v1/admin/flags/{id}/resolve` | body `{"note":"…"}`; `204` |
 | `GET /internal/v1/admin/accounts/{account_id}` | `{account, today, ledger, redemptions, flags, equipped}`; `404` if the account has never been seen |
 | `POST /internal/v1/admin/accounts/{account_id}/adjust` | `{"delta": 25, "reason": "event prize"}` (non-zero, within +/-5000, reason required, an admin cannot adjust themselves, never below zero); `200 {"balance"}` |
@@ -199,6 +207,7 @@ For the website's `/admin/rewards` page.
 | `PUT /internal/v1/admin/items/{id}/asset?platform=web&role=asset` (or `role=preview`) | raw body, `Content-Type` required, at most 32 MiB; `{sha256, bytes}` |
 | `POST /internal/v1/admin/items/{id}/state` | `{"state":"draft"}`, `"active"` or `"retired"`. Going `active` needs a preview and an asset for every listed platform (text `title` items excepted). `400` otherwise |
 | `GET /internal/v1/admin/missions` | all missions |
+| `GET /internal/v1/admin/metrics`, `PUT .../metrics/{id}`, `POST .../accounts/{id}/metrics/{metric}/release` or `/discard`, `POST /internal/v1/admin/grants`, `GET /internal/v1/admin/grants` | ladder metrics, held events and event/supporter grants: see [metrics.md](metrics.md) |
 | `POST /internal/v1/admin/missions`, `PUT /internal/v1/admin/missions/{id}` | create or replace a mission (Mission fields; `reward_points` 0-1000; `reward_item` must exist) |
 
 Item art review (admin checklist before activating): original OpenPak artwork, no Nintendo, Sony or

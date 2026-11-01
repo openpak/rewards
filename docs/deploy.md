@@ -15,7 +15,10 @@ Port block 20180: 20180 HTTP. Not yet in the public port plan.
 - Image `ghcr.io/openpak/rewards:latest`, quadlet `openpak-rewards.container` on `openpak.network`
   (pin the address with `pin-ips.sh --apply`), volume `openpak-rewards-data:/data` for reward files.
 - Env in the shared deploy `.env`: `REWARDS_DATABASE_URL`, `REWARDS_CORE_INTERNAL_KEY`,
-  `REWARDS_INTERNAL_KEY`, `REWARDS_ADMIN_KEY`.
+  `REWARDS_INTERNAL_KEY`, `REWARDS_ADMIN_KEY`, and `REWARDS_EVENTS_KEY` (the key game servers send to
+  `POST /internal/v1/events`; at least 32 characters, different from the other two; unset = only the
+  internal key can post events). Game servers need `REWARDS_EVENTS_URL=http://openpak-rewards:20180` and
+  the same key as `REWARDS_EVENTS_KEY` (see [metrics.md](metrics.md)).
 - Traefik routes `Host(rewards.openpak.org) && (PathPrefix(/v1) || Path(/healthz))` to the
   container. `/internal` is deliberately not routed: the website reaches it by container name
   (`http://openpak-rewards:20180`).
