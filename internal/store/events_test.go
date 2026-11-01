@@ -3,11 +3,16 @@ package store
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 )
 
 func ev(id, metric string, acct string) Event {
-	return Event{EventID: id, Source: "test", AccountID: acct, Metric: metric, Delta: 1}
+	e := Event{EventID: id, Source: "test", AccountID: acct, Metric: metric, Delta: 1}
+	if strings.Contains(metric, "_sessions") { // a distinct metric: one key per session
+		e.Delta, e.Keys = 0, []string{id}
+	}
+	return e
 }
 
 func count(t *testing.T, s *Store, acct, metric string) int64 {
@@ -32,12 +37,12 @@ func TestEventIsIdempotent(t *testing.T) {
 	s, _ := newStore(t)
 	ctx := context.Background()
 	for i, want := range []string{EvCounted, EvDuplicate, EvDuplicate} {
-		got, err := s.Ingest(ctx, ev("e1", "kart_races_completed.mk8dx", alice), nil)
+		got, err := s.Ingest(ctx, ev("e1", "kart_sessions.mk8dx", alice), nil)
 		if err != nil || got != want {
 			t.Fatalf("try %d: %s %v, want %s", i, got, err, want)
 		}
 	}
-	if n := count(t, s, alice, "kart_races_completed.mk8dx"); n != 1 {
+	if n := count(t, s, alice, "kart_sessions.mk8dx"); n != 1 {
 		t.Fatalf("count %d", n)
 	}
 }
@@ -158,10 +163,10 @@ func TestLadderTiersUnlockInOrderAndSumTheGames(t *testing.T) {
 	activate(t, s, "kart-races-1", "kart-races-10", "kart-races-25")
 	// Inactive until activated: no progress. Then races across two games sum.
 	for i := 0; i < 6; i++ {
-		s.Ingest(ctx, ev(fmt.Sprint("a", i), "kart_races_completed.mkwii", alice), nil)
+		s.Ingest(ctx, ev(fmt.Sprint("a", i), "kart_sessions.mkwii", alice), nil)
 	}
 	for i := 0; i < 5; i++ {
-		s.Ingest(ctx, ev(fmt.Sprint("b", i), "kart_races_completed.mk8dx", alice), nil)
+		s.Ingest(ctx, ev(fmt.Sprint("b", i), "kart_sessions.mk8dx", alice), nil)
 	}
 	ms, _ := s.MyMissions(ctx, alice)
 	get := func(id string) MissionStatus {
@@ -215,7 +220,7 @@ func TestInactiveLadderMissionsAreHidden(t *testing.T) {
 	all, _ := s.ListMissions(context.Background(), true)
 	n := 0
 	for _, m := range all {
-		if m.Metric == "kart_races_completed" {
+		if m.Metric == "kart_sessions" {
 			n++
 			if m.Active {
 				t.Fatalf("%s seeded active", m.ID)
@@ -232,7 +237,7 @@ func TestPerGameFirstFinishAndCollector(t *testing.T) {
 	ctx := context.Background()
 	activate(t, s, "kart-first-mkds", "kart-collector")
 	for _, g := range []string{"mkds", "mkwii", "mk7", "mk8"} {
-		s.Ingest(ctx, ev("k"+g, "kart_races_completed."+g, alice), nil)
+		s.Ingest(ctx, ev("k"+g, "kart_sessions."+g, alice), nil)
 	}
 	if m := get2(t, s, alice, "kart-collector"); m.Completed || m.Progress != 4 {
 		t.Fatalf("collector after 4 games: %+v", m)
@@ -242,12 +247,12 @@ func TestPerGameFirstFinishAndCollector(t *testing.T) {
 	}
 	// Ten races of one game do not make a collector.
 	for i := 0; i < 10; i++ {
-		s.Ingest(ctx, ev(fmt.Sprint("x", i), "kart_races_completed.mk8", alice), nil)
+		s.Ingest(ctx, ev(fmt.Sprint("x", i), "kart_sessions.mk8", alice), nil)
 	}
 	if m := get2(t, s, alice, "kart-collector"); m.Completed {
 		t.Fatal("collector needs every game")
 	}
-	s.Ingest(ctx, ev("last", "kart_races_completed.mk8dx", alice), nil)
+	s.Ingest(ctx, ev("last", "kart_sessions.mk8dx", alice), nil)
 	if m := get2(t, s, alice, "kart-collector"); !m.Completed || !m.Claimable {
 		t.Fatalf("collector with all five: %+v", m)
 	}
@@ -305,5 +310,48 @@ func TestPurgeErasesCounts(t *testing.T) {
 	s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM events WHERE account_id=$1`, alice).Scan(&n)
 	if n != 0 {
 		t.Fatal("events survived erase")
+	}
+}
+
+func TestSessionMissionsAreRepointed(t *testing.T) {
+	s, _ := newStore(t)
+	ctx := context.Background()
+	all, _ := s.ListMissions(ctx, true)
+	by := map[string]Mission{}
+	for _, m := range all {
+		by[m.ID] = m
+	}
+	want := map[string]string{
+		"kart-races-100": "kart_sessions", "splatoon-matches-10": "turf_sessions", "smash-battles-1": "brawl_sessions",
+		"kart-first-mk8dx": "kart_sessions.mk8dx", "splatoon-first-s2": "turf_sessions.s2", "smash-first-3ds": "brawl_sessions.3ds",
+		"kart-collector": "family_games:kart_sessions", "smash-collector": "family_games:brawl_sessions",
+	}
+	for id, metric := range want {
+		if by[id].Metric != metric || by[id].Active {
+			t.Errorf("%s: metric %q active %v, want %q inactive", id, by[id].Metric, by[id].Active, metric)
+		}
+	}
+	if _, ok := by["splatoon-first-s3"]; ok {
+		t.Error("Splatoon 3 has no session source and no mission")
+	}
+	if c := by["splatoon-collector"]; c.Metric != "family_games:turf_sessions" || c.Target != 2 {
+		t.Errorf("turf collector: %+v", c)
+	}
+	ms, _ := s.Metrics(ctx)
+	for _, m := range ms {
+		if strings.Contains(m.ID, "_completed.") {
+			t.Errorf("finisher metric %s should be gone", m.ID)
+		}
+	}
+	// Two Splatoon games make the collector.
+	activate(t, s, "splatoon-collector")
+	s.Ingest(ctx, ev("g1", "turf_sessions.s1", alice), nil)
+	s.Ingest(ctx, ev("g2", "turf_sessions.s1", alice), nil)
+	if m := get2(t, s, alice, "splatoon-collector"); m.Completed {
+		t.Fatal("two sessions of one game must not complete the collector")
+	}
+	s.Ingest(ctx, ev("g3", "turf_sessions.s2", alice), nil)
+	if m := get2(t, s, alice, "splatoon-collector"); !m.Completed {
+		t.Fatal("one session in each of the two games completes it")
 	}
 }

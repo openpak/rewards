@@ -8,6 +8,12 @@
   the service tells OpenVerse (`POST /internal/v1/activity`), fire and forget with retries. OpenVerse only posts for
   players who opted in. Off unless `REWARDS_VERSE_URL` and `REWARDS_VERSE_KEY` are set.
 
+## 0.3.0
+
+- Kart, Turf and Brawl ladders, per-game firsts and Collectors now count online sessions per game
+  (`kart_sessions.*`, `turf_sessions.*`, `brawl_sessions.*`, distinct by session id) instead of finished
+  races. The `*_completed.*` metrics are removed. Splatoon 3 has no metric; the Splatoon Collector needs two games.
+
 ## 0.2.1
 
 - An event with no `delta` counts as one.

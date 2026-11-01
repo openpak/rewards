@@ -43,7 +43,7 @@ func TestEventsEndpoint(t *testing.T) {
 	srv, _ := setup(t)
 	u := srv.URL + "/internal/v1/events"
 	eh := map[string]string{"X-Internal-Key": ekey}
-	ev := map[string]any{"event_id": "e1", "source": "t", "metric": "kart_races_completed.mkwii", "delta": 1, "identity": map[string]string{"namespace": "wiiu", "subject": "1234"}}
+	ev := map[string]any{"event_id": "e1", "source": "t", "metric": "kart_sessions.mkwii", "keys": []string{"gathering-1"}, "identity": map[string]string{"namespace": "wiiu", "subject": "1234"}}
 
 	if c, _ := do(t, "POST", u, nil, ev); c != 401 {
 		t.Fatalf("no key: %d", c)
@@ -91,7 +91,7 @@ func TestEventsEndpoint(t *testing.T) {
 	}
 	_, me := do(t, "GET", srv.URL+"/v1/me/metrics", map[string]string{"Authorization": "Bearer tok-alice"}, nil)
 	counts := me["counts"].(map[string]any)
-	if counts["kart_races_completed.mkwii"] != 1.0 || counts["trades_completed"] != 3.0 || counts["friends_played_with"] != 1.0 {
+	if counts["kart_sessions.mkwii"] != 1.0 || counts["trades_completed"] != 3.0 || counts["friends_played_with"] != 1.0 {
 		t.Fatalf("counts: %v", counts)
 	}
 }

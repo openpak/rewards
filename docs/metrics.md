@@ -51,14 +51,19 @@ Env: `REWARDS_EVENTS_URL=http://openpak-rewards:20180`, `REWARDS_EVENTS_KEY[_FIL
 `GET /v1/metrics` lists them; `GET /v1/me/metrics` (signed in) returns the caller's counts as
 `{"counts":{"<metric>":n}}`.
 
-Per-game "completed" metrics, with the family they sum into (a mission whose `metric` is the family name sums
-its members; `family_games:<family>` is how many members are at least 1, used by the Collector badges):
+Per-game session metrics, with the family they sum into (a mission whose `metric` is the family name sums
+its members; `family_games:<family>` is how many members are at least 1, used by the Collector badges). They are
+`distinct` metrics: the key is the session (gathering) id, so one session counts once per account.
 
 | Metric | Family |
 | --- | --- |
-| `kart_races_completed.mkds` `.mkwii` `.mk7` `.mk8` `.mk8dx` | `kart_races_completed` |
-| `splatoon_matches_completed.s1` `.s2` `.s3` | `splatoon_matches_completed` |
-| `smash_battles_completed.3ds` `.wiiu` `.ult` | `smash_battles_completed` |
+| `kart_sessions.mkds` `.mkwii` `.mk7` `.mk8` `.mk8dx` | `kart_sessions` |
+| `turf_sessions.s1` `.s2` (Splatoon 3 has no source) | `turf_sessions` |
+| `brawl_sessions.3ds` `.wiiu` `.ult` | `brawl_sessions` |
+
+A **session** is: the player was in a server-side matchmaking gathering together with at least one other player
+for 3 continuous minutes (`REWARDS_SESSION_MIN`, default 3m). A lobby alone, or one that ends before 3 minutes,
+counts nothing. It proves the player was in an online match or race lobby, not that a race finished.
 
 Standalone: `friends_played_with` (distinct; keys are other players, only accepted friends count, checked
 against the core's friend list), `maker_courses_played` (distinct course ids), `maker_courses_uploaded`
@@ -76,9 +81,9 @@ so tier N+1 starts counting when tier N is claimed:
 
 | Ladder (id prefix) | Metric | Tiers |
 | --- | --- | --- |
-| `kart-races-N` | `kart_races_completed` | 1 10 25 50 100 500 1000 2500 10000 |
-| `splatoon-matches-N` | `splatoon_matches_completed` | same |
-| `smash-battles-N` | `smash_battles_completed` | same |
+| `kart-races-N` | `kart_sessions` | 1 10 25 50 100 500 1000 2500 10000 |
+| `splatoon-matches-N` | `turf_sessions` | same |
+| `smash-battles-N` | `brawl_sessions` | same |
 | `online-sessions-N` | `sessions` | same |
 | `friends-played-N` | `friends_played_with` | 1 5 10 25 50 100 250 |
 | `maker-played-N` | `maker_courses_played` | 1 10 25 50 100 500 1000 2500 |
@@ -87,9 +92,10 @@ so tier N+1 starts counting when tier N is claimed:
 | `splatfests-N` | `splatfests_joined` | 1 5 10 25 50 |
 | `kart-tournaments-N` | `kart_tournaments_entered` | 1 5 10 25 50 100 |
 
-Per game: `kart-first-<mkds|mkwii|mk7|mk8|mk8dx>`, `splatoon-first-<s1|s2|s3>`, `smash-first-<3ds|wiiu|ult>`
-(first finished game, `once`); Collectors `kart-collector` (5 games), `splatoon-collector` (3),
-`smash-collector` (3), metric `family_games:<family>`.
+Per game: `kart-first-<mkds|mkwii|mk7|mk8|mk8dx>`, `splatoon-first-<s1|s2>`, `smash-first-<3ds|wiiu|ult>`
+(first online session, `once`); Collectors `kart-collector` (5 games), `splatoon-collector` (2),
+`smash-collector` (3), metric `family_games:<family>`. The ids keep their old names; the titles say Kart, Turf
+and Brawl Sessions.
 
 Rewards are points only; the badge art attaches with `PUT /internal/v1/admin/missions/{id}` setting
 `reward_item`. Activate a mission once its source is verified: `PUT` it with `"active": true`. Progress for
@@ -101,20 +107,17 @@ A server emits only from the code path that proved the action. Per metric, what 
 
 | Metric | Signal | Honest limits |
 | --- | --- | --- |
-| `kart_races_completed.mkwii`, `.mkds` | none | online races are peer to peer; `wfc-race` serves the leaderboard read only (no score submission yet), so no finish is observed. No source. |
-| `kart_races_completed.mk7` | none | matchmaking only. No source. |
-| `kart_races_completed.mk8` (Wii U) | NEX ranking competition score upload (`nex` mario-kart-8) | counts one finished tournament race per (tournament, season); not an online multiplayer race. A regular online race leaves no trace. |
-| `kart_races_completed.mk8dx` | none wired | |
-| `splatoon_matches_completed.s1` | Splatfest match upload (Ranking method 0x12, `nex` splatoon) | Splatfest matches only; ordinary Turf War and Ranked matches are not reported to the server. |
-| `splatoon_matches_completed.s2`, `.s3` | none | Splatoon 2 only exposes Splatfest ranking reads; Splatoon 3 is not hosted. |
-| `smash_battles_completed.*` | none | matchmaking and datastore only. |
+| `kart_sessions.mk7`, `.mk8` (Wii U), `turf_sessions.s1`, `brawl_sessions.3ds`, `.wiiu` | `nex` titles: a watcher reads the title's own `matchmaking.gatherings` table every 20 s and emits once a player has shared a gathering with another player for 3 minutes | Lobby presence, not a finished race. Only ever true for gatherings the server itself holds. |
+| `kart_sessions.mk8dx`, `turf_sessions.s2`, `brawl_sessions.ult` | `switch-nex`: the same watcher over the title's in-memory gatherings | Same. |
+| `kart_sessions.mkwii`, `.mkds` | none | The Wii/DS family has no account-core links (no `wfc` namespace), so a WFC profile cannot be mapped to an account. Inactive. |
+| Splatoon 3 | none | Not hosted for matchmaking (NPLN bring-up only). No metric. |
 | `sessions` (Online Sessions) | the account core's session history | already live, no event source. |
 | `friends_played_with` | none wired | needs a co-session signal from matchmaking. |
-| `splatfests_joined` | same upload as `splatoon_matches_completed.s1` | distinct festival ids. |
-| `kart_tournaments_entered` | same upload as `kart_races_completed.mk8` | distinct tournament ids. |
+| `splatfests_joined` | Splatoon Splatfest match upload, distinct festival ids | |
+| `kart_tournaments_entered` | MK8 (Wii U) competition score upload, distinct tournament ids | |
 | `maker_courses_uploaded` | SMM1: thumbnail attach complete (`CompleteAttachFile`, ends a course upload). SMM2: `CompleteCourse` | distinct course ids. |
 | `maker_courses_played` | SMM1: course record stored for a course that is not your own (a clear). SMM2: course body download for a course that is not your own | SMM2 has no clear signal; a download is the proxy. |
-| `trades_completed` | `pokemon-global-link` (taker when the trade is accepted, owner when the traded listing is collected) and `pokemon-home` (GTS taker, Wonder Box collect, both sides of a room trade) | GTS ids are shared (`gts:<listing>:<side>`), so a trade seen by both services counts once. Global Link identifies trainers by PID: Gen 6-7 as `3ds`, Gen 8+ as `switch`, Gen 4-5 as `wfc`, which counts once WFC accounts are linked in the core. |
+| `trades_completed` | `pokemon-global-link` (taker when the trade is accepted, owner when the traded listing is collected) and `pokemon-home` (GTS taker, Wonder Box collect, both sides of a room trade) | GTS ids are shared, so a trade seen by both services counts once. Gen 4/5 trainers have no `wfc` core links, so they count once WFC accounts are linked. |
 
 ## Admin: held events, metrics, grants
 
