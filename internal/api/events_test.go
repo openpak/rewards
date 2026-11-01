@@ -54,6 +54,10 @@ func TestEventsEndpoint(t *testing.T) {
 	if c, _ := do(t, "POST", u, map[string]string{"X-Admin-Key": akey}, ev); c != 401 {
 		t.Fatalf("admin key is not an event key: %d", c)
 	}
+	// No delta means one.
+	if c, b := do(t, "POST", u, eh, map[string]any{"event_id": "nodelta", "source": "t", "metric": "trades_completed", "account_id": alice}); c != 200 || results(b)[0]["status"] != "counted" {
+		t.Fatalf("default delta: %d %v", c, b)
+	}
 	// A user session cannot count anything.
 	if c, _ := do(t, "POST", u, map[string]string{"Authorization": "Bearer tok-alice"}, ev); c != 401 {
 		t.Fatalf("a user bearer must not post events: %d", c)
@@ -87,7 +91,7 @@ func TestEventsEndpoint(t *testing.T) {
 	}
 	_, me := do(t, "GET", srv.URL+"/v1/me/metrics", map[string]string{"Authorization": "Bearer tok-alice"}, nil)
 	counts := me["counts"].(map[string]any)
-	if counts["kart_races_completed.mkwii"] != 1.0 || counts["trades_completed"] != 2.0 || counts["friends_played_with"] != 1.0 {
+	if counts["kart_races_completed.mkwii"] != 1.0 || counts["trades_completed"] != 3.0 || counts["friends_played_with"] != 1.0 {
 		t.Fatalf("counts: %v", counts)
 	}
 }

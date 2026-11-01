@@ -132,6 +132,9 @@ func (s *Server) oneEvent(r *http.Request, e eventIn) (string, error) {
 			return "", err
 		}
 	}
+	if e.Delta == 0 {
+		e.Delta = 1 // an event with no delta is one occurrence
+	}
 	ev := store.Event{EventID: e.EventID, Source: e.Source, AccountID: acct, Metric: e.Metric, Delta: e.Delta, Keys: keys}
 	if e.OccurredAt != nil {
 		ev.OccurredAt = *e.OccurredAt

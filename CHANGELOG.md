@@ -2,6 +2,10 @@
 
 `git log` stays the source of truth; this file is the readable summary.
 
+## 0.2.1
+
+- An event with no `delta` counts as one.
+
 ## 0.2.0
 
 - Ladder badges: a metric registry and per-account counts fed only by game servers through
