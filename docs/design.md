@@ -1,6 +1,6 @@
 # OpenPak Rewards: design
 
-Status: approved 2026-11-01; this service is `openpak/rewards`.
+This service is `openpak/rewards`.
 Style: My Nintendo / Club Nintendo. Missions earn and play earns points; points buy cosmetic rewards.
 Scope: every network OpenPak serves (Switch, Wii U/3DS, Wii/DS, PS3, Xbox 360, Xbox).
 
@@ -302,16 +302,7 @@ transferred; every account earns automatically with `paused` as the opt-out; the
 in; reward artwork is OpenPak property for personal use of the owner of the item and is not part of this
 repository. Prices and caps can be changed without a release (`REWARDS_*` settings, catalogue rows).
 
-## 12. Build plan
-
-| Phase | What | Status |
-| --- | --- | --- |
-| 1 | This design | done |
-| 2 | Backend `openpak/rewards`: accrual, missions, catalogue, redemption, internal admin API, deploy | built and deployed (v0.1.0) |
-| 3 | Website and app: points balance, missions page, shop, equip; `/admin/rewards` (other agent, from `docs/api.md`) | next |
-| 4 | Art and asset pipeline: first catalogue batch; exporters (Switch JPEG, 360 gamerpic + STFS theme, PS3 `.p3t`) | artist |
-| 5 | Adapters read entitlements: nx-baas (icons), x360-profile/x360-store, np-account/np-community | after 4 |
-| 6 | Parental switch (Q4); event-driven accrual instead of polling when account count grows | later |
+## 12. Scaling
 
 Scaling note: polling touches `accounts x namespaces` calls per interval. That is fine at hundreds of
 accounts; the later optimisation is to poll only accounts the core's `presence_changed` stream reported
