@@ -105,6 +105,10 @@ func run() error {
 		return err
 	}
 	go cc.Follow(ctx, st)
+	go func() { // play from before Rewards saw each account, paid once
+		n, pts, err := st.SettleAllHistory(ctx)
+		log.Printf("rewards: play history settled: %d accounts, %d points, err=%v", n, pts, err)
+	}()
 	go func() { // friendships the current rules pay but nothing has paid yet
 		if err := st.SettleAllFriends(ctx); err != nil {
 			log.Printf("rewards: settle friends: %v", err)

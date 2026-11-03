@@ -62,15 +62,96 @@ func balance(t *testing.T, s *Store, acct string) int64 {
 	return a.Balance
 }
 
-func TestFirstSightIsABaselineNotABackfill(t *testing.T) {
+func TestFirstSightCountsHistoryOnce(t *testing.T) {
 	s, c := newStore(t)
 	ctx := context.Background()
 	res, err := s.Accrue(ctx, alice, "switch", tt("t1", 5*3600, 9), c.now())
-	if err != nil || res.Points != 0 || res.Counted != 0 {
-		t.Fatalf("baseline: %+v %v", res, err)
+	if err != nil || res.Counted != 0 || res.Points != 20 { // 5 h at 900 s per point, no daily cap
+		t.Fatalf("first sight: %+v %v", res, err)
 	}
-	if balance(t, s, alice) != 0 {
-		t.Fatal("history before the service must earn nothing")
+	a, _ := s.Account(ctx, alice)
+	if a.Balance != 20 || a.LifetimePlay != 5*3600 {
+		t.Fatalf("account: %+v", a)
+	}
+	// Seeing the same total again pays nothing more.
+	c.add(time.Minute)
+	if res, _ := s.Accrue(ctx, alice, "switch", tt("t1", 5*3600, 9), c.now()); res.Points != 0 {
+		t.Fatalf("replay paid %d", res.Points)
+	}
+}
+
+func TestSettleAllHistoryBackfillsOnce(t *testing.T) {
+	s, c := newStore(t)
+	ctx := context.Background()
+	// Two accounts as the old service left them: baselines recorded, history not yet counted.
+	for _, a := range []string{alice, bob} {
+		if _, err := s.pool.Exec(ctx, `INSERT INTO accounts (account_id) VALUES ($1)`, a); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ins := func(a, ns, title string, total, counted, hist int64) {
+		if _, err := s.pool.Exec(ctx, `INSERT INTO play_cursor (account_id, namespace, title_id, total_seconds, counted_seconds, seen_at, history_seconds, history_done) VALUES ($1,$2,$3,$4,$5,$6,$7,false)`,
+			a, ns, title, total, counted, c.now(), hist); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ins(alice, "switch", "t1", 40000, 4000, 36000) // 10 h of history
+	ins(alice, "wiiu", "t2", 9000, 0, 9000)        // 2.5 h
+	ins(bob, "switch", "t1", 10000, 0, 10000)
+	paused := true
+	s.SetSettings(ctx, bob, nil, &paused)
+	var days0 int64
+	s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM activity`).Scan(&days0)
+
+	n, pts, err := s.SettleAllHistory(ctx)
+	if err != nil || n != 1 || pts != 50 { // alice: 45000 s = 50 points; bob is paused
+		t.Fatalf("settle: %d %d %v", n, pts, err)
+	}
+	a, _ := s.Account(ctx, alice)
+	if a.Balance != 50 || a.LifetimePlay != 45000 {
+		t.Fatalf("alice: %+v", a)
+	}
+	var lines int
+	s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM ledger WHERE account_id=$1 AND source='history'`, alice).Scan(&lines)
+	if lines != 1 {
+		t.Fatalf("%d history ledger lines", lines)
+	}
+	// Missions: hours-10 is met by 12.5 h; titles_played counts both titles; play_days and activity unchanged.
+	var prog int64
+	var done bool
+	s.pool.QueryRow(ctx, `SELECT progress, completed_at IS NOT NULL FROM mission_progress WHERE account_id=$1 AND mission_id='hours-10' AND period='once'`, alice).Scan(&prog, &done)
+	if prog != 45000 || !done {
+		t.Fatalf("hours-10: %d %v", prog, done)
+	}
+	var m Mission
+	m.Metric = "titles_played"
+	if v, _ := s.metricValue(ctx, s.pool, alice, m, c.now()); v != 2 {
+		t.Fatalf("titles_played %d", v)
+	}
+	m.Metric = "play_days"
+	if v, _ := s.metricValue(ctx, s.pool, alice, m, c.now()); v != 0 {
+		t.Fatalf("play_days %d", v)
+	}
+	var days1 int64
+	s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM activity`).Scan(&days1)
+	if days1 != days0 {
+		t.Fatal("history must not write activity")
+	}
+	// A second run does nothing.
+	if n, pts, err := s.SettleAllHistory(ctx); err != nil || n != 0 || pts != 0 {
+		t.Fatalf("second run: %d %d %v", n, pts, err)
+	}
+	if b := balance(t, s, alice); b != 50 {
+		t.Fatalf("balance after rerun %d", b)
+	}
+	// Increments after the backfill still count normally and are not double-counted.
+	c.add(20 * time.Minute)
+	res, _ := s.Accrue(ctx, alice, "switch", tt("t1", 40000+1200, 2), c.now())
+	if res.Counted != 1200 {
+		t.Fatalf("increment %+v", res)
+	}
+	if a, _ := s.Account(ctx, alice); a.LifetimePlay != 45000+1200 {
+		t.Fatalf("lifetime %d", a.LifetimePlay)
 	}
 }
 
@@ -98,8 +179,8 @@ func TestAccrualEarnsCheckinNewTitleAndPlayPoints(t *testing.T) {
 	if res, _ := s.Accrue(ctx, alice, "switch", tt("t1", 2200+600, 3), c.now()); res.Points != 1 {
 		t.Fatalf("carry should pay one more point, got %d", res.Points)
 	}
-	if b := balance(t, s, alice); b != 5 {
-		t.Fatalf("balance %d, want 5", b)
+	if b := balance(t, s, alice); b != 6 { // 5 + 1 for the 1000 s of history
+		t.Fatalf("balance %d, want 6", b)
 	}
 }
 

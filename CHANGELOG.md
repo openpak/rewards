@@ -2,6 +2,15 @@
 
 `git log` stays the source of truth; this file is the readable summary.
 
+## 0.7.0
+
+- Play from before Rewards first saw an account now counts, once (owner, 2026-11-03). Migration 0006 keeps each
+  cursor's history (`history_seconds`, `history_done`). It adds to lifetime play (hours missions) and to the
+  all-time titles/networks/play-seconds metrics, and pays `floor(seconds / SecondsPerPoint)` as ONE ledger entry
+  (source `history`, no daily cap). It writes no `activity` rows, so play days and daily/weekly missions are untouched.
+- Runs at start for existing accounts (`SettleAllHistory`, idempotent, skips frozen and paused) and at first sight
+  for new ones, through the same `payHistory`.
+
 ## 0.6.0
 
 - Migration 0005: 65 `game_sessions.<game>` metrics (family `game_sessions`, distinct, cap 40) for every title whose

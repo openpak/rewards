@@ -64,7 +64,7 @@ func TestTickReadsHistoryFromTheCoreOnly(t *testing.T) {
 		t.Fatalf("points %d, want 4", pts)
 	}
 	acct, _ := s.Account(ctx, a)
-	if acct.Balance != 4 || acct.LifetimePlay != 1500 {
+	if acct.Balance != 4 || acct.LifetimePlay != 1650 {
 		t.Fatalf("account %+v", acct)
 	}
 	// The same history again pays nothing: no way to double count.

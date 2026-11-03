@@ -102,6 +102,13 @@ func (s *Store) metricValue(ctx context.Context, d q, acct string, m Mission, no
 	if err != nil {
 		return 0, err
 	}
+	if from == nil && to == nil && (m.Metric == "play_seconds" || m.Metric == "titles_played" || m.Metric == "networks_played") {
+		// All-time counts include the play from before Rewards; history has no days, so play_days is unchanged.
+		secs, titles, nets, err = s.withHistory(ctx, d, acct, m)
+		if err != nil {
+			return 0, err
+		}
+	}
 	switch m.Metric {
 	case "play_seconds":
 		return secs, nil
@@ -326,4 +333,51 @@ func (s *Store) UpsertMission(ctx context.Context, actor string, m Mission) erro
 		}
 		return audit(ctx, tx, actor, "mission.upsert", m.ID, "")
 	})
+}
+
+// withHistory recomputes the all-time seconds, titles and networks of an account from its activity plus its
+// play history (play_cursor.history_seconds), under the mission's network and title filters.
+func (s *Store) withHistory(ctx context.Context, d q, acct string, m Mission) (secs, titles, nets int64, err error) {
+	type key struct{ network, title string }
+	seen := map[key]bool{}
+	rows, err := d.Query(ctx, `SELECT network, title_id, SUM(seconds) FROM activity WHERE account_id=$1 AND ($2='' OR network=$2) AND ($3='' OR title_id=$3) GROUP BY network, title_id`, acct, m.Network, m.TitleID)
+	if err != nil {
+		return
+	}
+	for rows.Next() {
+		var k key
+		var n int64
+		if err = rows.Scan(&k.network, &k.title, &n); err != nil {
+			rows.Close()
+			return
+		}
+		seen[k] = true
+		secs += n
+	}
+	rows.Close()
+	rows, err = d.Query(ctx, `SELECT namespace, title_id, history_seconds FROM play_cursor WHERE account_id=$1 AND history_done AND history_seconds > 0 AND ($2='' OR title_id=$2)`, acct, m.TitleID)
+	if err != nil {
+		return
+	}
+	for rows.Next() {
+		var ns string
+		var k key
+		var n int64
+		if err = rows.Scan(&ns, &k.title, &n); err != nil {
+			rows.Close()
+			return
+		}
+		k.network = rules.Network(ns)
+		if m.Network != "" && k.network != m.Network {
+			continue
+		}
+		seen[k] = true
+		secs += n
+	}
+	rows.Close()
+	t, nn := map[string]bool{}, map[string]bool{}
+	for k := range seen {
+		t[k.title], nn[k.network] = true, true
+	}
+	return secs, int64(len(t)), int64(len(nn)), nil
 }

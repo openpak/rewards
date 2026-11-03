@@ -53,9 +53,13 @@ func (s *Store) Accrue(ctx context.Context, acct, ns string, entries []TitleTota
 			err := tx.QueryRow(ctx, `SELECT total_seconds, sessions, counted_seconds, carry_seconds, seen_at FROM play_cursor WHERE account_id=$1 AND namespace=$2 AND title_id=$3 FOR UPDATE`,
 				acct, ns, e.Title).Scan(&c.total, &c.sessions, &c.counted, &c.carry, &c.seen)
 			if err == pgx.ErrNoRows {
-				// First sight: baseline only, nothing is backfilled.
-				if _, err := tx.Exec(ctx, `INSERT INTO play_cursor (account_id, namespace, title_id, total_seconds, sessions, seen_at) VALUES ($1,$2,$3,$4,$5,$6)`,
-					acct, ns, e.Title, e.Seconds, e.Sessions, now); err != nil {
+				// First sight: the whole total is history, paid once by payHistory (not for a frozen or paused account).
+				hist := e.Seconds
+				if res.Skipped {
+					hist = 0
+				}
+				if _, err := tx.Exec(ctx, `INSERT INTO play_cursor (account_id, namespace, title_id, total_seconds, sessions, seen_at, history_seconds, history_done) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+					acct, ns, e.Title, e.Seconds, e.Sessions, now, hist, res.Skipped); err != nil {
 					return err
 				}
 				continue
@@ -91,6 +95,13 @@ func (s *Store) Accrue(ctx context.Context, acct, ns string, entries []TitleTota
 		}
 		if _, err := tx.Exec(ctx, `UPDATE accounts SET last_poll_at = $2 WHERE account_id = $1`, acct, now); err != nil {
 			return err
+		}
+		if !res.Skipped {
+			hp, err := s.payHistory(ctx, tx, acct)
+			if err != nil {
+				return err
+			}
+			res.Points += hp
 		}
 		if res.Counted > 0 {
 			bonus, err := s.afterPlay(ctx, tx, acct, day)
@@ -353,4 +364,81 @@ func (s *Store) settleFriends(ctx context.Context, tx pgx.Tx, acct string) error
 		}
 	}
 	return nil
+}
+
+// payHistory counts the play from before Rewards saw the account: every cursor row whose history is not
+// done adds its seconds to the lifetime play and is marked, and one "history" ledger entry pays
+// floor(seconds / SecondsPerPoint) with no daily cap. The caller holds the account's row lock and must not
+// call it for a frozen or paused account. Marking the rows in the same transaction makes it pay once.
+func (s *Store) payHistory(ctx context.Context, tx pgx.Tx, acct string) (int, error) {
+	var secs int64
+	var rows int
+	if err := tx.QueryRow(ctx, `SELECT COALESCE(SUM(history_seconds),0), COUNT(*) FROM play_cursor WHERE account_id=$1 AND NOT history_done`, acct).Scan(&secs, &rows); err != nil {
+		return 0, err
+	}
+	if rows == 0 {
+		return 0, nil
+	}
+	if _, err := tx.Exec(ctx, `UPDATE play_cursor SET history_done=true WHERE account_id=$1 AND NOT history_done`, acct); err != nil {
+		return 0, err
+	}
+	if secs == 0 {
+		return 0, nil
+	}
+	if _, err := tx.Exec(ctx, `UPDATE accounts SET lifetime_play_seconds = lifetime_play_seconds + $2 WHERE account_id=$1`, acct, secs); err != nil {
+		return 0, err
+	}
+	pts := int(secs / max(s.R.SecondsPerPoint, 1))
+	if pts > 0 {
+		var n int
+		if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM ledger WHERE account_id=$1 AND source='history'`, acct).Scan(&n); err != nil {
+			return 0, err
+		}
+		ok, err := credit(ctx, tx, acct, int64(pts), "earn", "history", "", fmt.Sprintf("history:%s:%d", acct, n), "")
+		if err != nil || !ok {
+			return 0, err
+		}
+	}
+	return pts, s.settleFriends(ctx, tx, acct)
+}
+
+// SettleAllHistory pays the play history of every account that has some unpaid (run at start; idempotent).
+// It returns the accounts paid and the points paid.
+func (s *Store) SettleAllHistory(ctx context.Context) (accounts, points int, err error) {
+	rows, err := s.pool.Query(ctx, `SELECT DISTINCT account_id FROM play_cursor WHERE NOT history_done`)
+	if err != nil {
+		return 0, 0, err
+	}
+	var accts []string
+	for rows.Next() {
+		var a string
+		if err := rows.Scan(&a); err != nil {
+			rows.Close()
+			return 0, 0, err
+		}
+		accts = append(accts, a)
+	}
+	rows.Close()
+	for _, a := range accts {
+		err := s.tx(ctx, func(tx pgx.Tx) error {
+			acc, err := lock(ctx, tx, a)
+			if err != nil {
+				return err
+			}
+			if acc.Frozen || acc.Paused {
+				return nil
+			}
+			p, err := s.payHistory(ctx, tx, a)
+			if err != nil {
+				return err
+			}
+			points += p
+			accounts++
+			return s.refreshMissions(ctx, tx, a, s.Now())
+		})
+		if err != nil {
+			return accounts, points, err
+		}
+	}
+	return accounts, points, nil
 }
