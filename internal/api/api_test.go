@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/openpak/rewards/internal/core"
 	"github.com/openpak/rewards/internal/rules"
@@ -188,5 +189,49 @@ func TestShopFlowThroughHTTP(t *testing.T) {
 	}
 	if _, body := do(t, "GET", u+"/v1/me", uh, nil); body["account"].(map[string]any)["balance"].(float64) != 0 {
 		t.Fatalf("erased account kept balance: %v", body)
+	}
+}
+
+func TestUpcomingCatalog(t *testing.T) {
+	srv, _ := setup(t)
+	u := srv.URL
+	ah := map[string]string{"X-Admin-Key": akey, "X-Admin-Actor": admin}
+	ih := map[string]string{"X-Admin-Key": akey, "X-Admin-Actor": admin, "Content-Type": "image/png"}
+	mk := func(id string, from, until time.Time) {
+		t.Helper()
+		it := map[string]any{"id": id, "kind": "badge", "name": id, "price": 40, "platforms": []string{"web"}, "available_from": from}
+		if !until.IsZero() {
+			it["available_until"] = until
+		}
+		if c, _ := do(t, "POST", u+"/internal/v1/admin/items", ah, it); c != 200 {
+			t.Fatalf("create %s %d", id, c)
+		}
+		for _, role := range []string{"asset", "preview"} {
+			if c, _ := do(t, "PUT", u+"/internal/v1/admin/items/"+id+"/asset?platform=web&role="+role, ih, []byte("a")); c != 200 {
+				t.Fatalf("asset %s %d", id, c)
+			}
+		}
+		if c, _ := do(t, "POST", u+"/internal/v1/admin/items/"+id+"/state", ah, map[string]any{"state": "active"}); c != 204 {
+			t.Fatalf("activate %s %d", id, c)
+		}
+	}
+	now := time.Now()
+	mk("badge-soon", now.Add(48*time.Hour), time.Time{})
+	mk("badge-later", now.Add(96*time.Hour), time.Time{})
+	mk("badge-closed", now.Add(48*time.Hour), now.Add(-time.Hour))
+	mk("badge-now", now.Add(-time.Hour), time.Time{})
+	_, body := do(t, "GET", u+"/v1/catalog?upcoming=1", nil, nil)
+	items := body["items"].([]any)
+	if len(items) != 2 || items[0].(map[string]any)["id"] != "badge-soon" || items[1].(map[string]any)["id"] != "badge-later" {
+		t.Fatalf("upcoming %v", body)
+	}
+	if items[0].(map[string]any)["available_from"] == nil {
+		t.Fatalf("the date is part of the answer: %v", items[0])
+	}
+	if _, body := do(t, "GET", u+"/v1/catalog", nil, nil); len(body["items"].([]any)) != 1 {
+		t.Fatalf("the plain catalogue hides upcoming items: %v", body)
+	}
+	if c, _ := do(t, "POST", u+"/v1/me/redeem", map[string]string{"Authorization": "Bearer tok-alice"}, map[string]any{"item_id": "badge-soon"}); c == 201 {
+		t.Fatal("an upcoming item must not be buyable")
 	}
 }

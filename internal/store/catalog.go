@@ -114,6 +114,49 @@ func (s *Store) Catalog(ctx context.Context, acct, kind, platform string, all bo
 	return out, nil
 }
 
+// Upcoming lists the active, priced items whose sale starts in the future and has not already closed, soonest
+// first. With acct set the ones the account owns are left out. The pictures are public; buying stays closed
+// (Redeem checks onSale).
+func (s *Store) Upcoming(ctx context.Context, acct, kind, platform string) ([]Item, error) {
+	rows, err := s.pool.Query(ctx, `SELECT `+itemCols+` FROM items i WHERE ($1='' OR i.kind=$1) AND ($2='' OR $2 = ANY(i.platforms)) AND i.state='active' AND i.price IS NOT NULL AND i.available_from > $3 ORDER BY i.available_from, i.id`, kind, platform, s.Now())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	now := s.Now()
+	out := []Item{}
+	for rows.Next() {
+		it, err := scanItem(rows)
+		if err != nil {
+			return nil, err
+		}
+		if it.AvailableUntil != nil && !now.Before(*it.AvailableUntil) {
+			continue
+		}
+		out = append(out, it)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if acct == "" {
+		return out, nil
+	}
+	var kept []Item
+	for _, it := range out {
+		own, err := s.Owns(ctx, acct, it.ID)
+		if err != nil {
+			return nil, err
+		}
+		if !own {
+			kept = append(kept, it)
+		}
+	}
+	if kept == nil {
+		kept = []Item{}
+	}
+	return kept, nil
+}
+
 func (s *Store) GetItem(ctx context.Context, id string) (Item, error) {
 	it, err := scanItem(s.pool.QueryRow(ctx, `SELECT `+itemCols+` FROM items i WHERE i.id=$1`, id))
 	if err == pgx.ErrNoRows {

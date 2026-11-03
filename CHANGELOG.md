@@ -2,6 +2,12 @@
 
 `git log` stays the source of truth; this file is the readable summary.
 
+## 0.4.0
+
+- `GET /v1/catalog?upcoming=1` (and `/v1/me/catalog?upcoming=1`, which leaves out what the account owns) lists
+  active, priced items whose sale starts in the future, soonest first, with `available_from`. An item whose
+  `available_until` has passed is never listed. Buying them stays closed until their date.
+
 ## 0.3.1
 
 - Kart, Turf and Brawl ladders, per-game firsts and Collectors now count online sessions per game

@@ -263,6 +263,15 @@ func qint(r *http.Request, name string, def int) int {
 
 func (s *Server) catalog(all bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if !all && r.URL.Query().Get("upcoming") == "1" {
+			items, err := s.Store.Upcoming(r.Context(), "", r.URL.Query().Get("kind"), r.URL.Query().Get("platform"))
+			if err != nil {
+				fail(w, err)
+				return
+			}
+			out(w, 200, map[string]any{"items": items})
+			return
+		}
 		items, err := s.Store.Catalog(r.Context(), "", r.URL.Query().Get("kind"), r.URL.Query().Get("platform"), all)
 		if err != nil {
 			fail(w, err)
@@ -367,6 +376,15 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request, me string) {
 }
 
 func (s *Server) myCatalog(w http.ResponseWriter, r *http.Request, me string) {
+	if r.URL.Query().Get("upcoming") == "1" {
+		items, err := s.Store.Upcoming(r.Context(), me, r.URL.Query().Get("kind"), r.URL.Query().Get("platform"))
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		out(w, 200, map[string]any{"items": items})
+		return
+	}
 	items, err := s.Store.Catalog(r.Context(), me, r.URL.Query().Get("kind"), r.URL.Query().Get("platform"), false)
 	if err != nil {
 		fail(w, err)
