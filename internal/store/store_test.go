@@ -266,6 +266,55 @@ func TestTotalGoingDownRebaselines(t *testing.T) {
 	}
 }
 
+func TestHistorySessionsAndDaysCountAllTimeOnly(t *testing.T) {
+	s, c := newStore(t)
+	ctx := context.Background()
+	// First sight: 7 sessions of history, no activity rows.
+	s.Accrue(ctx, alice, "switch", tt("t1", 3600, 7), c.now())
+	// Today's play writes one activity day (2026-11-02).
+	c.add(20 * time.Minute)
+	s.Accrue(ctx, alice, "switch", tt("t1", 3600+600, 8), c.now())
+	val := func(metric string, kind string) int64 {
+		m := Mission{Kind: kind, Metric: metric}
+		v, err := s.metricValue(ctx, s.pool, alice, m, c.now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	if v := val("sessions", "once"); v != 8 { // 7 from history + 1 counted
+		t.Fatalf("sessions %d", v)
+	}
+	calls := 0
+	fetch := func(_ context.Context, before time.Time) ([]string, error) {
+		calls++
+		if before.IsZero() {
+			t.Fatal("a cutoff is required")
+		}
+		return []string{"2026-10-01", "2026-10-02", "2026-11-02"}, nil // the last overlaps today's activity
+	}
+	for i := 0; i < 3; i++ {
+		if err := s.BackfillDays(ctx, alice, fetch); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("core asked %d times, want once", calls)
+	}
+	if v := val("play_days", "once"); v != 3 { // union: two history days + today
+		t.Fatalf("all-time play_days %d", v)
+	}
+	if v := val("play_days", "daily"); v != 1 {
+		t.Fatalf("daily play_days %d", v)
+	}
+	if v := val("play_days", "weekly"); v != 1 {
+		t.Fatalf("weekly play_days %d", v)
+	}
+	if v := val("sessions", "daily"); v != 1 {
+		t.Fatalf("daily sessions %d", v)
+	}
+}
+
 func TestFrozenAndPausedEarnNothingAndDoNotBackfillLater(t *testing.T) {
 	s, c := newStore(t)
 	ctx := context.Background()

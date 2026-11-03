@@ -15,6 +15,7 @@ import (
 type Source interface {
 	Accounts(ctx context.Context, after string, limit int) ([]string, string, error)
 	History(ctx context.Context, account, namespace string) ([]core.Title, error)
+	PlayDays(ctx context.Context, account string, before time.Time) ([]string, error)
 }
 
 type Poller struct {
@@ -77,6 +78,12 @@ func (p *Poller) Tick(ctx context.Context) (accounts, points int, err error) {
 					continue
 				}
 				points += res.Points
+			}
+			// Once per account: the days played before Rewards saw it.
+			if err := p.Store.BackfillDays(ctx, id, func(c context.Context, before time.Time) ([]string, error) {
+				return p.Src.PlayDays(c, id, before)
+			}); err != nil {
+				log.Printf("rewards: play days %s: %v", short(id), err)
 			}
 		}
 		if next == "" {

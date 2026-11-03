@@ -102,12 +102,13 @@ func (s *Store) metricValue(ctx context.Context, d q, acct string, m Mission, no
 	if err != nil {
 		return 0, err
 	}
-	if from == nil && to == nil && (m.Metric == "play_seconds" || m.Metric == "titles_played" || m.Metric == "networks_played") {
-		// All-time counts include the play from before Rewards; history has no days, so play_days is unchanged.
-		secs, titles, nets, err = s.withHistory(ctx, d, acct, m)
+	if from == nil && to == nil {
+		// All-time counts include the play from before Rewards (play_cursor history and history_days).
+		h, err := s.withHistory(ctx, d, acct, m)
 		if err != nil {
 			return 0, err
 		}
+		secs, sess, days, titles, nets = h.secs, h.sessions, h.days, h.titles, h.nets
 	}
 	switch m.Metric {
 	case "play_seconds":
@@ -335,35 +336,40 @@ func (s *Store) UpsertMission(ctx context.Context, actor string, m Mission) erro
 	})
 }
 
-// withHistory recomputes the all-time seconds, titles and networks of an account from its activity plus its
-// play history (play_cursor.history_seconds), under the mission's network and title filters.
-func (s *Store) withHistory(ctx context.Context, d q, acct string, m Mission) (secs, titles, nets int64, err error) {
+type allTime struct{ secs, sessions, days, titles, nets int64 }
+
+// withHistory recomputes an account's all-time totals from its activity plus its play history
+// (play_cursor.history_seconds / history_sessions, and history_days for days), under the mission's
+// network and title filters. Days are the union of the two day sets, so none counts twice; history
+// days carry no network or title, so a filtered mission ignores them.
+func (s *Store) withHistory(ctx context.Context, d q, acct string, m Mission) (h allTime, err error) {
 	type key struct{ network, title string }
 	seen := map[key]bool{}
-	rows, err := d.Query(ctx, `SELECT network, title_id, SUM(seconds) FROM activity WHERE account_id=$1 AND ($2='' OR network=$2) AND ($3='' OR title_id=$3) GROUP BY network, title_id`, acct, m.Network, m.TitleID)
+	rows, err := d.Query(ctx, `SELECT network, title_id, SUM(seconds), SUM(sessions) FROM activity WHERE account_id=$1 AND ($2='' OR network=$2) AND ($3='' OR title_id=$3) GROUP BY network, title_id`, acct, m.Network, m.TitleID)
 	if err != nil {
 		return
 	}
 	for rows.Next() {
 		var k key
-		var n int64
-		if err = rows.Scan(&k.network, &k.title, &n); err != nil {
+		var n, c int64
+		if err = rows.Scan(&k.network, &k.title, &n, &c); err != nil {
 			rows.Close()
 			return
 		}
 		seen[k] = true
-		secs += n
+		h.secs += n
+		h.sessions += c
 	}
 	rows.Close()
-	rows, err = d.Query(ctx, `SELECT namespace, title_id, history_seconds FROM play_cursor WHERE account_id=$1 AND history_done AND history_seconds > 0 AND ($2='' OR title_id=$2)`, acct, m.TitleID)
+	rows, err = d.Query(ctx, `SELECT namespace, title_id, history_seconds, history_sessions FROM play_cursor WHERE account_id=$1 AND history_done AND (history_seconds > 0 OR history_sessions > 0) AND ($2='' OR title_id=$2)`, acct, m.TitleID)
 	if err != nil {
 		return
 	}
 	for rows.Next() {
 		var ns string
 		var k key
-		var n int64
-		if err = rows.Scan(&ns, &k.title, &n); err != nil {
+		var n, c int64
+		if err = rows.Scan(&ns, &k.title, &n, &c); err != nil {
 			rows.Close()
 			return
 		}
@@ -372,12 +378,19 @@ func (s *Store) withHistory(ctx context.Context, d q, acct string, m Mission) (s
 			continue
 		}
 		seen[k] = true
-		secs += n
+		h.secs += n
+		h.sessions += c
 	}
 	rows.Close()
 	t, nn := map[string]bool{}, map[string]bool{}
 	for k := range seen {
 		t[k.title], nn[k.network] = true, true
 	}
-	return secs, int64(len(t)), int64(len(nn)), nil
+	h.titles, h.nets = int64(len(t)), int64(len(nn))
+	if m.Network == "" && m.TitleID == "" {
+		err = d.QueryRow(ctx, `SELECT COUNT(*) FROM (SELECT day FROM activity WHERE account_id=$1 UNION SELECT day FROM history_days WHERE account_id=$1) x`, acct).Scan(&h.days)
+	} else {
+		err = d.QueryRow(ctx, `SELECT COUNT(DISTINCT day) FROM activity WHERE account_id=$1 AND ($2='' OR network=$2) AND ($3='' OR title_id=$3)`, acct, m.Network, m.TitleID).Scan(&h.days)
+	}
+	return
 }

@@ -54,12 +54,12 @@ func (s *Store) Accrue(ctx context.Context, acct, ns string, entries []TitleTota
 				acct, ns, e.Title).Scan(&c.total, &c.sessions, &c.counted, &c.carry, &c.seen)
 			if err == pgx.ErrNoRows {
 				// First sight: the whole total is history, paid once by payHistory (not for a frozen or paused account).
-				hist := e.Seconds
+				hist, histSess := e.Seconds, e.Sessions
 				if res.Skipped {
-					hist = 0
+					hist, histSess = 0, 0
 				}
-				if _, err := tx.Exec(ctx, `INSERT INTO play_cursor (account_id, namespace, title_id, total_seconds, sessions, seen_at, history_seconds, history_done) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-					acct, ns, e.Title, e.Seconds, e.Sessions, now, hist, res.Skipped); err != nil {
+				if _, err := tx.Exec(ctx, `INSERT INTO play_cursor (account_id, namespace, title_id, total_seconds, sessions, seen_at, history_seconds, history_done, history_sessions) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+					acct, ns, e.Title, e.Seconds, e.Sessions, now, hist, res.Skipped, histSess); err != nil {
 					return err
 				}
 				continue
@@ -441,4 +441,42 @@ func (s *Store) SettleAllHistory(ctx context.Context) (accounts, points int, err
 		}
 	}
 	return accounts, points, nil
+}
+
+// BackfillDays records, once per account, the UTC days it played before Rewards first saw it. fetch asks the
+// account core for the distinct days of sessions started before the cutoff (the account's first sight).
+// The days go in history_days, never in activity, so daily and weekly missions cannot see them; all-time
+// play_days is the union of the two sets. Frozen and paused accounts are left for later.
+func (s *Store) BackfillDays(ctx context.Context, acct string, fetch func(ctx context.Context, before time.Time) ([]string, error)) error {
+	var done, blocked bool
+	var since time.Time
+	err := s.pool.QueryRow(ctx, `SELECT history_days_done, frozen OR paused, created_at FROM accounts WHERE account_id=$1`, acct).Scan(&done, &blocked, &since)
+	if err == pgx.ErrNoRows || done || blocked {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	days, err := fetch(ctx, since)
+	if err != nil {
+		return err
+	}
+	return s.tx(ctx, func(tx pgx.Tx) error {
+		if _, err := lock(ctx, tx, acct); err != nil {
+			return err
+		}
+		var again bool
+		if err := tx.QueryRow(ctx, `SELECT history_days_done FROM accounts WHERE account_id=$1`, acct).Scan(&again); err != nil || again {
+			return err
+		}
+		for _, d := range days {
+			if _, err := tx.Exec(ctx, `INSERT INTO history_days (account_id, day) VALUES ($1,$2::date) ON CONFLICT DO NOTHING`, acct, d); err != nil {
+				return err
+			}
+		}
+		if _, err := tx.Exec(ctx, `UPDATE accounts SET history_days_done=true WHERE account_id=$1`, acct); err != nil {
+			return err
+		}
+		return s.refreshMissions(ctx, tx, acct, s.Now())
+	})
 }

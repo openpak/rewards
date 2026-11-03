@@ -14,6 +14,7 @@ import (
 type fake struct {
 	accts []string
 	hist  map[string][]core.Title // key account|namespace
+	days  map[string][]string
 }
 
 func (f *fake) Accounts(_ context.Context, after string, _ int) ([]string, string, error) {
@@ -24,6 +25,10 @@ func (f *fake) Accounts(_ context.Context, after string, _ int) ([]string, strin
 }
 func (f *fake) History(_ context.Context, a, ns string) ([]core.Title, error) {
 	return f.hist[a+"|"+ns], nil
+}
+
+func (f *fake) PlayDays(_ context.Context, a string, _ time.Time) ([]string, error) {
+	return f.days[a], nil
 }
 
 func TestTickReadsHistoryFromTheCoreOnly(t *testing.T) {

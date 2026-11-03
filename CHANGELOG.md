@@ -2,6 +2,14 @@
 
 `git log` stays the source of truth; this file is the readable summary.
 
+## 0.8.0
+
+- Migration 0007. History also counts online sessions (`play_cursor.history_sessions`, the cursor's sessions that no
+  activity row holds) and play days (`history_days`, filled once per account from the new account core RPC
+  `Sessions.GetPlayDays`, account-api v0.1.1, with the account's first sight as the cutoff). The all-time `sessions`
+  and `play_days` metrics include them (days are the union with activity, so none counts twice); daily and weekly
+  periods never read them. No extra points.
+
 ## 0.7.0
 
 - Play from before Rewards first saw an account now counts, once (owner, 2026-11-03). Migration 0006 keeps each

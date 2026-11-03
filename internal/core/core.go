@@ -131,6 +131,17 @@ func (c *Client) History(ctx context.Context, account, namespace string) ([]Titl
 	return out, nil
 }
 
+// PlayDays is the distinct UTC days (YYYY-MM-DD) the account played in sessions started before the cutoff.
+func (c *Client) PlayDays(ctx context.Context, account string, before time.Time) ([]string, error) {
+	rctx, cancel := context.WithTimeout(c.ctx(ctx), 15*time.Second)
+	defer cancel()
+	resp, err := c.Sessions.GetPlayDays(rctx, &accountv1.GetPlayDaysRequest{AccountId: account, BeforeUnix: before.Unix()})
+	if err != nil {
+		return nil, err
+	}
+	return resp.GetDays(), nil
+}
+
 // Handler receives the events this service cares about.
 type Handler interface {
 	CoreCursor(ctx context.Context) (uint64, error)
