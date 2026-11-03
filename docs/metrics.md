@@ -61,6 +61,9 @@ its members; `family_games:<family>` is how many members are at least 1, used by
 | `turf_sessions.s1` `.s2` `.s3` | `turf_sessions` |
 | `brawl_sessions.3ds` `.wiiu` `.ult` | `brawl_sessions` |
 
+Every other game with a server-side matchmaking store sends `game_sessions.<game>` (family `game_sessions`, same rules,
+one per title: `game_sessions.arms`, `.mario-tennis-aces`, `.tetris-axis` ... see migration 0005).
+
 A **session** is: the player was in a server-side matchmaking gathering together with at least one other player
 for 3 continuous minutes (`REWARDS_SESSION_MIN`, default 3m). A lobby alone, or one that ends before 3 minutes,
 counts nothing. It proves the player was in an online match or race lobby, not that a race finished.

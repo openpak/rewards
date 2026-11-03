@@ -2,6 +2,12 @@
 
 `git log` stays the source of truth; this file is the readable summary.
 
+## 0.6.0
+
+- Migration 0005: 65 `game_sessions.<game>` metrics (family `game_sessions`, distinct, cap 40) for every title whose
+  server reports online sessions: the Switch NEX titles (switch-nex 0.10.0) and the Wii U/3DS NEX titles (nex 1.5.0).
+  No mission uses them yet.
+
 ## 0.5.0
 
 - Migration 0004: metric `turf_sessions.s3` (Splatoon 3 online sessions, family `turf_sessions`), sent by npln.
