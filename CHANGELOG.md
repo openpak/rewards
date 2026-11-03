@@ -2,6 +2,13 @@
 
 `git log` stays the source of truth; this file is the readable summary.
 
+## 0.4.1
+
+- Friends missions count every accepted friend, not only friends who have played.
+- A friend pays its points at once, with no play needed (`FriendMinSeconds` is now 0); the lifetime cap of 10 paid
+  friends stays, and a frozen or paused friend still pays nothing.
+- At start the service settles every friendship the rules now pay but nothing has paid yet.
+
 ## 0.4.0
 
 - `GET /v1/catalog?upcoming=1` (and `/v1/me/catalog?upcoming=1`, which leaves out what the account owns) lists

@@ -287,33 +287,31 @@ func TestSeriesMissionUnlocksAfterPredecessorClaimed(t *testing.T) {
 	}
 }
 
-func TestFriendBonusNeedsRealPlayAndPaysLaterOnce(t *testing.T) {
+func TestFriendPaysAtOnceAndCountsForMissions(t *testing.T) {
 	s, c := newStore(t)
 	ctx := context.Background()
-	// Alice has real play (30+ minutes), Bob none.
-	s.Accrue(ctx, alice, "switch", tt("t1", 0, 0), c.now())
-	c.add(time.Hour)
-	s.Accrue(ctx, alice, "switch", tt("t1", 3000, 1), c.now())
-	b0 := balance(t, s, alice)
-	if err := s.FriendAccepted(ctx, alice, bob); err != nil {
+	b0, bob0 := balance(t, s, alice), balance(t, s, bob)
+	if err := s.FriendAccepted(ctx, alice, bob); err != nil { // neither has played
 		t.Fatal(err)
 	}
-	if balance(t, s, alice) != b0 {
-		t.Fatal("a friend with no play of their own pays nothing")
-	}
-	if balance(t, s, bob) != 3 {
-		t.Fatalf("bob befriended a real player and is paid, balance %d", balance(t, s, bob))
-	}
-	// Bob now plays 35 minutes: Alice is settled once.
-	s.Accrue(ctx, bob, "switch", tt("g", 0, 0), c.now())
-	c.add(time.Hour)
-	s.Accrue(ctx, bob, "switch", tt("g", 2100, 1), c.now())
-	if balance(t, s, alice) != b0+3 {
-		t.Fatalf("alice should be settled once: %d vs %d", balance(t, s, alice), b0)
+	if balance(t, s, alice) != b0+3 || balance(t, s, bob) != bob0+3 {
+		t.Fatalf("both sides are paid at once: alice %d bob %d", balance(t, s, alice), balance(t, s, bob))
 	}
 	s.FriendAccepted(ctx, alice, bob) // the event again
 	if balance(t, s, alice) != b0+3 {
 		t.Fatal("a pair pays once")
+	}
+	n, err := s.metricValue(ctx, s.pool, alice, Mission{Kind: "once", Metric: "friends_added"}, c.now())
+	if err != nil || n != 1 {
+		t.Fatalf("friends_added = %d, %v; want 1", n, err)
+	}
+	// A friendship from before the rule change (never paid) is settled by the sweep.
+	s.pool.Exec(ctx, `INSERT INTO friends (account_id, other_id) VALUES ($1,$2)`, alice, "carol")
+	if err := s.SettleAllFriends(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if balance(t, s, alice) != b0+6 {
+		t.Fatalf("sweep pays the old friendship once: %d", balance(t, s, alice)-b0)
 	}
 }
 

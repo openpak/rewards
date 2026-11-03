@@ -105,6 +105,11 @@ func run() error {
 		return err
 	}
 	go cc.Follow(ctx, st)
+	go func() { // friendships the current rules pay but nothing has paid yet
+		if err := st.SettleAllFriends(ctx); err != nil {
+			log.Printf("rewards: settle friends: %v", err)
+		}
+	}()
 
 	if env("REWARDS_ACCRUAL", "on") != "off" {
 		p := &accrual.Poller{Src: cc, Store: st, Interval: interval,

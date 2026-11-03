@@ -78,8 +78,10 @@ func periodRange(kind string, now time.Time) (from, to *time.Time) {
 func (s *Store) metricValue(ctx context.Context, d q, acct string, m Mission, now time.Time) (int64, error) {
 	from, to := periodRange(m.Kind, now)
 	if m.Metric == "friends_added" {
+		// Every accepted friend counts towards the missions (owner, 2026-11-03); only the points paid per
+		// friend (payFriend) wait until that friend has played.
 		var n int64
-		err := d.QueryRow(ctx, `SELECT COUNT(*) FROM friends WHERE account_id=$1 AND awarded AND ($2::timestamptz IS NULL OR created_at >= $2) AND ($3::timestamptz IS NULL OR created_at < $3)`, acct, from, to).Scan(&n)
+		err := d.QueryRow(ctx, `SELECT COUNT(*) FROM friends WHERE account_id=$1 AND ($2::timestamptz IS NULL OR created_at >= $2) AND ($3::timestamptz IS NULL OR created_at < $3)`, acct, from, to).Scan(&n)
 		return n, err
 	}
 	if m.Metric == "lifetime_play_seconds" {

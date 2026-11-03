@@ -102,8 +102,8 @@ func TestFriend(t *testing.T) {
 	if r.Friend(1800, false, 0, false) != 3 {
 		t.Fatal("friend with 30 minutes pays")
 	}
-	if r.Friend(1799, false, 0, false) != 0 {
-		t.Fatal("a friend with no real play pays nothing (alt farming)")
+	if r.Friend(0, false, 0, false) != 3 {
+		t.Fatal("a friend pays at once, with no play of their own (owner 2026-11-03)")
 	}
 	if r.Friend(9999, true, 0, false) != 0 {
 		t.Fatal("a pair pays once")

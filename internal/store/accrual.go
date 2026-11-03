@@ -265,9 +265,13 @@ func (s *Store) payFriend(ctx context.Context, tx pgx.Tx, acct, other string) er
 		return err
 	}
 	var friendPlay int64
-	err := tx.QueryRow(ctx, `SELECT lifetime_play_seconds FROM accounts WHERE account_id=$1 AND NOT frozen AND NOT paused`, other).Scan(&friendPlay)
+	var friendBlocked bool
+	err := tx.QueryRow(ctx, `SELECT lifetime_play_seconds, frozen OR paused FROM accounts WHERE account_id=$1`, other).Scan(&friendPlay, &friendBlocked)
 	if err != nil && err != pgx.ErrNoRows {
 		return err
+	}
+	if friendBlocked { // a frozen or paused friend never pays, whatever the play rule
+		return nil
 	}
 	pts := s.R.Friend(friendPlay, paid, paidSoFar, frozen || paused)
 	if pts == 0 {
@@ -279,6 +283,40 @@ func (s *Store) payFriend(ctx context.Context, tx pgx.Tx, acct, other string) er
 	}
 	_, err = tx.Exec(ctx, `UPDATE friends SET awarded = true WHERE account_id=$1 AND other_id=$2`, acct, other)
 	return err
+}
+
+// SettleAllFriends pays every friendship the rules now allow but that was never paid (run at start, so a
+// rule change such as dropping the play requirement reaches friendships made before it).
+func (s *Store) SettleAllFriends(ctx context.Context) error {
+	rows, err := s.pool.Query(ctx, `SELECT account_id, other_id FROM friends WHERE NOT awarded`)
+	if err != nil {
+		return err
+	}
+	var pairs [][2]string
+	for rows.Next() {
+		var p [2]string
+		if err := rows.Scan(&p[0], &p[1]); err != nil {
+			rows.Close()
+			return err
+		}
+		pairs = append(pairs, p)
+	}
+	rows.Close()
+	for _, p := range pairs {
+		err := s.tx(ctx, func(tx pgx.Tx) error {
+			if _, err := lock(ctx, tx, p[0]); err != nil {
+				return err
+			}
+			if err := s.payFriend(ctx, tx, p[0], p[1]); err != nil {
+				return err
+			}
+			return s.refreshMissions(ctx, tx, p[0], s.Now())
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // settleFriends pays the people who befriended acct before acct had played enough to count.

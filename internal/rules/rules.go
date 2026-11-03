@@ -33,7 +33,7 @@ func Default() Rules {
 		SecondsPerPoint: 900, PlayDailyCap: 8, PlayTitleDailyCap: 4, ClampSlackSeconds: 60,
 		CheckinBonus: 1, CheckinMinSeconds: 300,
 		NewTitleBonus: 2, NewTitleMinSeconds: 600, NewTitleDailyCap: 3,
-		FriendBonus: 3, FriendMinSeconds: 1800, FriendLifetimeCap: 10,
+		FriendBonus: 3, FriendMinSeconds: 0, FriendLifetimeCap: 10, // owner 2026-11-03: a friend pays at once, no play needed
 		FlagCapStreakDays: 7, FlagClampsPerDay: 3, MaxSingleGrantAdmin: 5000,
 	}
 }
