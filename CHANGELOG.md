@@ -2,6 +2,13 @@
 
 `git log` stays the source of truth; this file is the readable summary.
 
+## 0.9.0
+
+- Migration 0008: 16 new `game_sessions.<game>` metrics for the Switch NPLN titles (npln 0.11.0): Stardew Valley,
+  Super Mario Bros. Wonder, Human: Fall Flat, PlateUp!, Dinkum, Core Keeper, Go-Go Town!, Bayonetta 3, Pokemon
+  Scarlet/Violet, Pokemon Legends: Arceus, Super Mario Party Jamboree, Monster Hunter Rise, Hamster Playground,
+  Wavecade, Endless Ocean Luminous, MGS Peace Walker. Terraria reuses the existing id.
+
 ## 0.8.0
 
 - Migration 0007. History also counts online sessions (`play_cursor.history_sessions`, the cursor's sessions that no
