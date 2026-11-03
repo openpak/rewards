@@ -2,6 +2,14 @@
 
 `git log` stays the source of truth; this file is the readable summary.
 
+## 0.10.0
+
+- Migration 0009: `game_sessions.<game>` for the vendor-hosted Switch titles (Outbound, Moving Out 1 and 2, We Were
+  Here, Stumble Guys, Among Us, Fall Guys, Diablo II: Resurrected, Diablo III, Crash Team Racing Nitro-Fueled,
+  DOOM + DOOM II, Northgard, TMNT Shredder's Revenge, PvZ Battle for Neighborville, Brawlhalla, Unrailed!, Super
+  Animal Royale, Grounded, Hello Kitty Island Adventure, Black Ice; Core Keeper, Don't Starve Together and Gang
+  Beasts already exist), plus `spelunky2_daily_runs` and `spelunky2_ranked_runs` (card #78).
+
 ## 0.9.0
 
 - Migration 0008: 16 new `game_sessions.<game>` metrics for the Switch NPLN titles (npln 0.11.0): Stardew Valley,

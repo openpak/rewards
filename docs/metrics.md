@@ -64,6 +64,10 @@ its members; `family_games:<family>` is how many members are at least 1, used by
 Every other game with a server-side matchmaking store sends `game_sessions.<game>` (family `game_sessions`, same rules,
 one per title: `game_sessions.arms`, `.mario-tennis-aces`, `.tetris-axis` ... see migration 0005).
 
+Vendor hosts (Photon, Klei, Team17, EOS, Battle.net, Among Us, Demonware, PlayFab, UGS, Shiro; migration 0009) send the
+same `game_sessions.<game>` from their room or lobby membership. Spelunky 2 has no rooms: its server sends
+`spelunky2_daily_runs` (key: the day) and `spelunky2_ranked_runs` (key: the run id) for results it accepted.
+
 A **session** is: the player was in a server-side matchmaking gathering together with at least one other player
 for 3 continuous minutes (`REWARDS_SESSION_MIN`, default 3m). A lobby alone, or one that ends before 3 minutes,
 counts nothing. It proves the player was in an online match or race lobby, not that a race finished.
