@@ -2,6 +2,9 @@
 
 `git log` stays the source of truth; this file is the readable summary.
 
+## v0.12.0 — 2026-11-03
+- Per-request logging: one slog line per HTTP request (method, path, status, ms) on stderr via internal/httplog. Query strings, headers and bodies are never logged; /healthz and /metrics are skipped.
+
 ## 0.11.0
 
 - Migration 0010 (card #80): three metric families for ladders that span games. `sports_sessions` (ARMS, Mario Tennis Aces,

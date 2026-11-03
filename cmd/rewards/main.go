@@ -19,6 +19,7 @@ import (
 	"github.com/openpak/rewards/internal/accrual"
 	"github.com/openpak/rewards/internal/api"
 	"github.com/openpak/rewards/internal/core"
+	"github.com/openpak/rewards/internal/httplog"
 	"github.com/openpak/rewards/internal/rules"
 	"github.com/openpak/rewards/internal/store"
 )
@@ -149,7 +150,7 @@ func run() error {
 	}
 	srv := &http.Server{
 		Addr:              env("REWARDS_HTTP_ADDR", "127.0.0.1:20180"),
-		Handler:           (&api.Server{Store: st, Core: cc, Dir: cc, EventsKey: eventsKey, InternalKey: webKey, AdminKey: adminKey, CORS: origins, RatePerMin: 120, Verse: verse}).Handler(),
+		Handler:           httplog.Middleware((&api.Server{Store: st, Core: cc, Dir: cc, EventsKey: eventsKey, InternalKey: webKey, AdminKey: adminKey, CORS: origins, RatePerMin: 120, Verse: verse}).Handler()),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       60 * time.Second,
 		WriteTimeout:      60 * time.Second,
