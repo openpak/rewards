@@ -2,6 +2,13 @@
 
 `git log` stays the source of truth; this file is the readable summary.
 
+## 0.11.0
+
+- Migration 0010 (card #80): three metric families for ladders that span games. `sports_sessions` (ARMS, Mario Tennis Aces,
+  Mario Strikers: Battle League, Mario Golf: Super Rush), `royale_sessions` (Super Mario Bros. 35, Pac-Man 99) and
+  `hunt_sessions` (the Monster Hunter games on Wii U, 3DS and Switch). Members keep their `game_sessions.<game>` ids, only
+  the family moves. New metric `game_sessions.monster-hunter-generations-ultimate`.
+
 ## 0.10.0
 
 - Migration 0009: `game_sessions.<game>` for the vendor-hosted Switch titles (Outbound, Moving Out 1 and 2, We Were

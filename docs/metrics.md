@@ -61,6 +61,11 @@ its members; `family_games:<family>` is how many members are at least 1, used by
 | `turf_sessions.s1` `.s2` `.s3` | `turf_sessions` |
 | `brawl_sessions.3ds` `.wiiu` `.ult` | `brawl_sessions` |
 
+Card #80 families (members keep their `game_sessions.<game>` ids, migration 0010): `sports_sessions` (ARMS, Mario Tennis Aces,
+Mario Strikers, Mario Golf), `royale_sessions` (Super Mario Bros. 35, Pac-Man 99), `hunt_sessions` (Monster Hunter 3 Ultimate, 4,
+4 Ultimate, Generations, XX, Stories, Generations Ultimate, Rise). Ladders `sports-sessions-N`, `royale-sessions-N`,
+`hunt-sessions-N`, firsts `sports-first-*`, `royale-first-*`, `hunt-first-*`, Collector `hunt-collector`.
+
 Every other game with a server-side matchmaking store sends `game_sessions.<game>` (family `game_sessions`, same rules,
 one per title: `game_sessions.arms`, `.mario-tennis-aces`, `.tetris-axis` ... see migration 0005).
 
