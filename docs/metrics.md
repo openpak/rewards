@@ -34,7 +34,7 @@ Answer `200 {"results":[{"event_id","status","error"}]}`, one per event. `status
 - `event_id` is the dedupe key (kept 60 days). Make it stable for the real occurrence
   (`<game>:<thing>:<ids>`), never random, so a retry or restart cannot count twice.
 - Identity: the account core's link `namespace` and `subject`: `wiiu` and `3ds` use the PID in decimal
-  (the sibling namespace is tried too), `switch` the 16-hex BAAS user id, `wfc` the WFC profile id,
+  (the sibling namespace is tried too), `switch` the 16-hex BAAS user id, `wfc` the console user id (the website links it from a friend code),
   `np` PSN, `xbox360`/`xbox` the XUID. Resolved through the core's `Links.GetLinkBySubject`, cached 10 minutes.
 - `sum` metrics take `delta` 1..`max_delta`. `distinct` metrics take `keys` (up to 16) and count each key
   once per account, ever.
@@ -58,7 +58,7 @@ its members; `family_games:<family>` is how many members are at least 1, used by
 | Metric | Family |
 | --- | --- |
 | `kart_sessions.mkds` `.mkwii` `.mk7` `.mk8` `.mk8dx` | `kart_sessions` |
-| `turf_sessions.s1` `.s2` (Splatoon 3 has no source) | `turf_sessions` |
+| `turf_sessions.s1` `.s2` `.s3` | `turf_sessions` |
 | `brawl_sessions.3ds` `.wiiu` `.ult` | `brawl_sessions` |
 
 A **session** is: the player was in a server-side matchmaking gathering together with at least one other player
@@ -92,8 +92,8 @@ so tier N+1 starts counting when tier N is claimed:
 | `splatfests-N` | `splatfests_joined` | 1 5 10 25 50 |
 | `kart-tournaments-N` | `kart_tournaments_entered` | 1 5 10 25 50 100 |
 
-Per game: `kart-first-<mkds|mkwii|mk7|mk8|mk8dx>`, `splatoon-first-<s1|s2>`, `smash-first-<3ds|wiiu|ult>`
-(first online session, `once`); Collectors `kart-collector` (5 games), `splatoon-collector` (2),
+Per game: `kart-first-<mkds|mkwii|mk7|mk8|mk8dx>`, `splatoon-first-<s1|s2|s3>`, `smash-first-<3ds|wiiu|ult>`
+(first online session, `once`); Collectors `kart-collector` (5 games), `splatoon-collector` (3),
 `smash-collector` (3), metric `family_games:<family>`. The ids keep their old names; the titles say Kart, Turf
 and Brawl Sessions.
 
@@ -109,8 +109,8 @@ A server emits only from the code path that proved the action. Per metric, what 
 | --- | --- | --- |
 | `kart_sessions.mk7`, `.mk8` (Wii U), `turf_sessions.s1`, `brawl_sessions.3ds`, `.wiiu` | `nex` titles: a watcher reads the title's own `matchmaking.gatherings` table every 20 s and emits once a player has shared a gathering with another player for 3 minutes | Lobby presence, not a finished race. Only ever true for gatherings the server itself holds. |
 | `kart_sessions.mk8dx`, `turf_sessions.s2`, `brawl_sessions.ult` | `switch-nex`: the same watcher over the title's in-memory gatherings | Same. |
-| `kart_sessions.mkwii`, `.mkds` | none | The Wii/DS family has no account-core links (no `wfc` namespace), so a WFC profile cannot be mapped to an account. Inactive. |
-| Splatoon 3 | none | Not hosted for matchmaking (NPLN bring-up only). No metric. |
+| `kart_sessions.mkwii`, `.mkds` | `wfc-qr2`: a watcher over its matchmaking groups (rooms) emits once a player has shared a group with another player for 3 minutes | Lobby presence, not a finished race. The identity is `wfc` plus the console user id; only consoles linked on the website count (an unlinked console answers `unresolved`). |
+| `turf_sessions.s3` | `npln` (Splatoon 3): a watcher over the game sessions (rooms, private battles, matchmaker pools) emits once a player has shared one with another player for 3 minutes | Lobby presence, not a finished match. The identity is `switch` plus the BAAS user id. |
 | `sessions` (Online Sessions) | the account core's session history | already live, no event source. |
 | `friends_played_with` | none wired | needs a co-session signal from matchmaking. |
 | `splatfests_joined` | Splatoon Splatfest match upload, distinct festival ids | |

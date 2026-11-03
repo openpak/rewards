@@ -2,6 +2,11 @@
 
 `git log` stays the source of truth; this file is the readable summary.
 
+## 0.5.0
+
+- Migration 0004: metric `turf_sessions.s3` (Splatoon 3 online sessions, family `turf_sessions`), sent by npln.
+- Docs: Mario Kart Wii and DS sessions have a source (`wfc-qr2`); WFC identities are console user ids.
+
 ## 0.4.1
 
 - Friends missions count every accepted friend, not only friends who have played.

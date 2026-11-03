@@ -331,8 +331,16 @@ func TestSessionMissionsAreRepointed(t *testing.T) {
 			t.Errorf("%s: metric %q active %v, want %q inactive", id, by[id].Metric, by[id].Active, metric)
 		}
 	}
-	if _, ok := by["splatoon-first-s3"]; ok {
-		t.Error("Splatoon 3 has no session source and no mission")
+	// Splatoon 3 has a session metric (npln); its missions are created by the admin loader, not a migration.
+	if ms, _ := s.Metrics(ctx); !func() bool {
+		for _, m := range ms {
+			if m.ID == "turf_sessions.s3" && m.Family == "turf_sessions" {
+				return true
+			}
+		}
+		return false
+	}() {
+		t.Error("turf_sessions.s3 metric missing")
 	}
 	if c := by["splatoon-collector"]; c.Metric != "family_games:turf_sessions" || c.Target != 2 {
 		t.Errorf("turf collector: %+v", c)
