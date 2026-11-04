@@ -2,6 +2,12 @@
 
 `git log` stays the source of truth; this file is the readable summary.
 
+## v0.13.0 — 2026-11-04
+- Migration 0011 (card #67): metric families `leaderboard_new_best` and `achievement_unlocked`, one `<family>.<title>` metric per
+  title (mode sum, delta 1) as titles start emitting, matching what the core leaderboards and achievements services send.
+  First rows: `leaderboard_new_best.terraria`, `leaderboard_new_best.mario-kart-8-deluxe`, `achievement_unlocked.terraria`.
+  Add a row per title in a new migration; an undefined title is rejected as an unknown metric.
+
 ## v0.12.0 — 2026-11-03
 - Per-request logging: one slog line per HTTP request (method, path, status, ms) on stderr via internal/httplog. Query strings, headers and bodies are never logged; /healthz and /metrics are skipped.
 

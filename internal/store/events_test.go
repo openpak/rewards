@@ -1,8 +1,11 @@
 package store
 
 import (
+	"os"
+
 	"context"
 	"fmt"
+	"github.com/openpak/rewards/internal/rules"
 	"strings"
 	"testing"
 )
@@ -361,5 +364,55 @@ func TestSessionMissionsAreRepointed(t *testing.T) {
 	s.Ingest(ctx, ev("g3", "turf_sessions.s2", alice), nil)
 	if m := get2(t, s, alice, "splatoon-collector"); !m.Completed {
 		t.Fatal("one session in each of the two games completes it")
+	}
+}
+
+// Card #67: the leaderboards and achievements services send these metric names; a typo on either
+// side means every event is dropped, so the names are pinned here exactly as the services build them
+// ("leaderboard_new_best." + title, "achievement_unlocked." + title).
+func TestLeaderboardAndAchievementMetrics(t *testing.T) {
+	s, _ := newStore(t)
+	ctx := context.Background()
+	for _, m := range []string{"leaderboard_new_best.terraria", "leaderboard_new_best.mario-kart-8-deluxe", "achievement_unlocked.terraria"} {
+		for i, want := range []string{EvCounted, EvDuplicate} {
+			got, err := s.Ingest(ctx, Event{EventID: "x:" + m, Source: "test", AccountID: alice, Metric: m, Delta: 1}, nil)
+			if err != nil || got != want {
+				t.Fatalf("%s try %d: %s %v, want %s", m, i, got, err, want)
+			}
+		}
+		if n := count(t, s, alice, m); n != 1 {
+			t.Fatalf("%s count %d", m, n)
+		}
+	}
+	// A title that has not been defined yet is refused, not silently counted.
+	if _, err := s.Ingest(ctx, Event{EventID: "u", Source: "test", AccountID: alice, Metric: "leaderboard_new_best.unknown-title", Delta: 1}, nil); err == nil {
+		t.Fatal("accepted a metric nobody defined")
+	}
+}
+
+// Restart and migration: reopening the store re-runs the migrations (a no-op), the metrics and the
+// counted events survive, and a replayed event id is still a duplicate.
+func TestMetricsSurviveRestartAndMigrationRerun(t *testing.T) {
+	s, _ := newStore(t)
+	ctx := context.Background()
+	e := Event{EventID: "lb:mario-kart-8-deluxe:0:" + alice + ":1", Source: "test", AccountID: alice, Metric: "leaderboard_new_best.mario-kart-8-deluxe", Delta: 1}
+	if got, err := s.Ingest(ctx, e, nil); err != nil || got != EvCounted {
+		t.Fatalf("first: %s %v", got, err)
+	}
+	url := os.Getenv("REWARDS_TEST_DATABASE_URL")
+	s2, err := Open(ctx, url, t.TempDir(), rules.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s2.Close()
+	if got, err := s2.Ingest(ctx, e, nil); err != nil || got != EvDuplicate {
+		t.Fatalf("after restart: %s %v", got, err)
+	}
+	if n := count(t, s2, alice, "leaderboard_new_best.mario-kart-8-deluxe"); n != 1 {
+		t.Fatalf("count after restart %d", n)
+	}
+	var fam string
+	if err := s2.pool.QueryRow(ctx, `SELECT family FROM metrics WHERE id='achievement_unlocked.terraria'`).Scan(&fam); err != nil || fam != "achievement_unlocked" {
+		t.Fatalf("family %q %v", fam, err)
 	}
 }
