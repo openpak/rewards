@@ -2,6 +2,11 @@
 
 `git log` stays the source of truth; this file is the readable summary.
 
+## v0.14.0 — 2026-11-04
+- Migration 0012 (card #63): `leaderboard_new_best.<title>` for the 24 switch-nex Ranking/Ranking2 titles (Castle Crashers Remastered, Monopoly, TMNT Shredder's Revenge,
+  Pac-Man 99, Mario Party Superstars, Mario Golf Super Rush, ARMS, SMB35, Mario Tennis Aces, Animal Crossing NH, Luigi's Mansion 3, Mario Strikers, Minecraft, Splatoon 2,
+  Super Mario Maker 2, Super Mario Odyssey, Smash Ultimate, 3D World + Bowser's Fury, Kirby's Dream Buffet, Clubhouse Games 51, Risk of Rain 1/Returns/2, Don't Starve Together).
+
 ## v0.13.0 — 2026-11-04
 - Migration 0011 (card #67): metric families `leaderboard_new_best` and `achievement_unlocked`, one `<family>.<title>` metric per
   title (mode sum, delta 1) as titles start emitting, matching what the core leaderboards and achievements services send.

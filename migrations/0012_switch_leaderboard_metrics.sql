@@ -1,0 +1,28 @@
+-- Card #63: the switch-nex Ranking / Ranking2 titles file their scores in the core leaderboards (switch-nex v0.13.0),
+-- which announces leaderboard_new_best.<title> with the title's neutral key (the NEX title name). Same shape as 0011.
+INSERT INTO metrics (id, family, title, mode, daily_cap, max_delta, require_friend) VALUES
+ ('leaderboard_new_best.castle-crashers-remastered', 'leaderboard_new_best', 'Castle Crashers Remastered new personal bests', 'sum', 100, 1, false),
+ ('leaderboard_new_best.monopoly', 'leaderboard_new_best', 'Monopoly new personal bests', 'sum', 100, 1, false),
+ ('leaderboard_new_best.tmnt-shredders-revenge', 'leaderboard_new_best', 'TMNT: Shredder''s Revenge new personal bests', 'sum', 100, 1, false),
+ ('leaderboard_new_best.pac-man-99', 'leaderboard_new_best', 'Pac-Man 99 new personal bests', 'sum', 100, 1, false),
+ ('leaderboard_new_best.mario-party-superstars', 'leaderboard_new_best', 'Mario Party Superstars new personal bests', 'sum', 100, 1, false),
+ ('leaderboard_new_best.mario-golf-super-rush', 'leaderboard_new_best', 'Mario Golf: Super Rush new personal bests', 'sum', 100, 1, false),
+ ('leaderboard_new_best.arms', 'leaderboard_new_best', 'ARMS new personal bests', 'sum', 100, 1, false),
+ ('leaderboard_new_best.super-mario-bros-35', 'leaderboard_new_best', 'Super Mario Bros. 35 new personal bests', 'sum', 100, 1, false),
+ ('leaderboard_new_best.mario-tennis-aces', 'leaderboard_new_best', 'Mario Tennis Aces new personal bests', 'sum', 100, 1, false),
+ ('leaderboard_new_best.animal-crossing-new-horizons', 'leaderboard_new_best', 'Animal Crossing: New Horizons new personal bests', 'sum', 100, 1, false),
+ ('leaderboard_new_best.luigis-mansion-3', 'leaderboard_new_best', 'Luigi''s Mansion 3 new personal bests', 'sum', 100, 1, false),
+ ('leaderboard_new_best.mario-strikers-battle-league', 'leaderboard_new_best', 'Mario Strikers: Battle League new personal bests', 'sum', 100, 1, false),
+ ('leaderboard_new_best.minecraft', 'leaderboard_new_best', 'Minecraft new personal bests', 'sum', 100, 1, false),
+ ('leaderboard_new_best.splatoon-2', 'leaderboard_new_best', 'Splatoon 2 new personal bests', 'sum', 100, 1, false),
+ ('leaderboard_new_best.super-mario-maker-2', 'leaderboard_new_best', 'Super Mario Maker 2 new personal bests', 'sum', 100, 1, false),
+ ('leaderboard_new_best.super-mario-odyssey', 'leaderboard_new_best', 'Super Mario Odyssey new personal bests', 'sum', 100, 1, false),
+ ('leaderboard_new_best.super-smash-bros-ultimate', 'leaderboard_new_best', 'Super Smash Bros. Ultimate new personal bests', 'sum', 100, 1, false),
+ ('leaderboard_new_best.super-mario-3d-world-bowsers-fury', 'leaderboard_new_best', 'Super Mario 3D World + Bowser''s Fury new personal bests', 'sum', 100, 1, false),
+ ('leaderboard_new_best.kirbys-dream-buffet', 'leaderboard_new_best', 'Kirby''s Dream Buffet new personal bests', 'sum', 100, 1, false),
+ ('leaderboard_new_best.clubhouse-games-51', 'leaderboard_new_best', 'Clubhouse Games: 51 Worldwide Classics new personal bests', 'sum', 100, 1, false),
+ ('leaderboard_new_best.risk-of-rain', 'leaderboard_new_best', 'Risk of Rain new personal bests', 'sum', 100, 1, false),
+ ('leaderboard_new_best.risk-of-rain-returns', 'leaderboard_new_best', 'Risk of Rain Returns new personal bests', 'sum', 100, 1, false),
+ ('leaderboard_new_best.dont-starve-together', 'leaderboard_new_best', 'Don''t Starve Together new personal bests', 'sum', 100, 1, false),
+ ('leaderboard_new_best.risk-of-rain-2', 'leaderboard_new_best', 'Risk of Rain 2 new personal bests', 'sum', 100, 1, false)
+ON CONFLICT (id) DO NOTHING;
