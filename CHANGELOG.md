@@ -2,6 +2,10 @@
 
 `git log` stays the source of truth; this file is the readable summary.
 
+## v0.16.0 — 2026-11-04
+- Card #85 (database only): reward artwork bytes live in Postgres (`asset_blobs`, migration 0014, keyed by sha256); serving reads from the database.
+  Start-up imports any file in `REWARDS_ASSET_DIR` not yet in the table (counts logged, files never deleted).
+
 ## v0.15.0 — 2026-11-04
 - Migration 0013: `leaderboard_new_best.<title>` for the 33 PS3 boards (29 titles plus the EU/JP regions of Demon's Souls and Armored Core V), the 30 Xbox 360 titles
   (`x360:<title id>`) and `mario-kart-wii`.

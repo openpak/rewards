@@ -4,6 +4,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"crypto/subtle"
 	"encoding/json"
@@ -11,7 +12,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -291,16 +291,10 @@ func (s *Server) missions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) serveAsset(w http.ResponseWriter, r *http.Request, a store.Asset) {
-	f, err := os.Open(a.Path)
-	if err != nil {
-		msg(w, 404, "not found")
-		return
-	}
-	defer f.Close()
 	w.Header().Set("Content-Type", a.ContentType)
 	w.Header().Set("ETag", `"`+a.SHA256+`"`)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	http.ServeContent(w, r, "", time.Time{}, f)
+	http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(a.Data))
 }
 
 func (s *Server) preview(w http.ResponseWriter, r *http.Request) {

@@ -248,7 +248,7 @@ func (s *Store) SetItemState(ctx context.Context, actor, id, state string) error
 	})
 }
 
-// PutAsset stores a file content-addressed under AssetDir and records it.
+// PutAsset stores the bytes content-addressed in asset_blobs and records the item_assets row.
 func (s *Store) PutAsset(ctx context.Context, actor, id, platform, role, contentType string, body io.Reader) (sha string, n int64, err error) {
 	if role != "asset" && role != "preview" {
 		return "", 0, invalid("role must be asset or preview")
@@ -262,30 +262,20 @@ func (s *Store) PutAsset(ctx context.Context, actor, id, platform, role, content
 	if _, err := s.GetItem(ctx, id); err != nil {
 		return "", 0, err
 	}
-	if err := os.MkdirAll(s.AssetDir, 0o750); err != nil {
-		return "", 0, err
-	}
-	f, err := os.CreateTemp(s.AssetDir, ".upload-*")
+	data, err := io.ReadAll(io.LimitReader(body, MaxAssetBytes+1))
 	if err != nil {
 		return "", 0, err
 	}
-	defer os.Remove(f.Name())
-	h := sha256.New()
-	n, err = io.Copy(io.MultiWriter(f, h), io.LimitReader(body, MaxAssetBytes+1))
-	if cerr := f.Close(); err == nil {
-		err = cerr
-	}
-	if err != nil {
-		return "", 0, err
-	}
+	n = int64(len(data))
 	if n == 0 || n > MaxAssetBytes {
 		return "", 0, invalid("asset must be 1 byte to %d MiB", MaxAssetBytes>>20)
 	}
-	sha = hex.EncodeToString(h.Sum(nil))
-	if err := os.Rename(f.Name(), filepath.Join(s.AssetDir, sha)); err != nil {
-		return "", 0, err
-	}
+	sum := sha256.Sum256(data)
+	sha = hex.EncodeToString(sum[:])
 	err = s.tx(ctx, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `INSERT INTO asset_blobs (sha256, data) VALUES ($1,$2) ON CONFLICT DO NOTHING`, sha, data); err != nil {
+			return err
+		}
 		if _, err := tx.Exec(ctx, `INSERT INTO item_assets (item_id, platform, role, sha256, bytes, content_type) VALUES ($1,$2,$3,$4,$5,$6)
 			ON CONFLICT (item_id, platform, role) DO UPDATE SET sha256=$4, bytes=$5, content_type=$6`, id, platform, role, sha, n, contentType); err != nil {
 			return err
@@ -296,7 +286,7 @@ func (s *Store) PutAsset(ctx context.Context, actor, id, platform, role, content
 }
 
 type Asset struct {
-	Path        string
+	Data        []byte
 	SHA256      string
 	Bytes       int64
 	ContentType string
@@ -307,12 +297,12 @@ type Asset struct {
 // the first platform that has the asset.
 func (s *Store) FindAsset(ctx context.Context, id, platform, role string) (Asset, error) {
 	var a Asset
-	err := s.pool.QueryRow(ctx, `SELECT sha256, bytes, content_type FROM item_assets WHERE item_id=$1 AND role=$3 AND ($2='' OR platform=$2) ORDER BY platform LIMIT 1`, id, platform, role).
-		Scan(&a.SHA256, &a.Bytes, &a.ContentType)
+	err := s.pool.QueryRow(ctx, `SELECT a.sha256, a.bytes, a.content_type, b.data FROM item_assets a JOIN asset_blobs b ON b.sha256=a.sha256
+		WHERE a.item_id=$1 AND a.role=$3 AND ($2='' OR a.platform=$2) ORDER BY a.platform LIMIT 1`, id, platform, role).
+		Scan(&a.SHA256, &a.Bytes, &a.ContentType, &a.Data)
 	if err == pgx.ErrNoRows {
 		return a, ErrNotFound
 	}
-	a.Path = filepath.Join(s.AssetDir, a.SHA256)
 	return a, err
 }
 
@@ -619,4 +609,45 @@ func (s *Store) Entitlements(ctx context.Context, acct, platform string) ([]Enti
 		out = append(out, e)
 	}
 	return out, rows.Err()
+}
+
+// ImportAssets copies every file in AssetDir that is not yet in asset_blobs into the table.
+// Files are never deleted; only counts are returned. Idempotent.
+func (s *Store) ImportAssets(ctx context.Context) (imported, skipped int, err error) {
+	if s.AssetDir == "" {
+		return 0, 0, nil
+	}
+	ents, err := os.ReadDir(s.AssetDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, 0, nil
+		}
+		return 0, 0, err
+	}
+	for _, e := range ents {
+		name := e.Name()
+		if e.IsDir() || len(name) != 64 {
+			skipped++
+			continue
+		}
+		var have bool
+		if err := s.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM asset_blobs WHERE sha256=$1)`, name).Scan(&have); err != nil {
+			return imported, skipped, err
+		}
+		if have {
+			continue
+		}
+		data, rerr := os.ReadFile(filepath.Join(s.AssetDir, name))
+		sum := sha256.Sum256(data)
+		if rerr != nil || len(data) == 0 || hex.EncodeToString(sum[:]) != name {
+			skipped++
+			continue
+		}
+		tag, err := s.pool.Exec(ctx, `INSERT INTO asset_blobs (sha256, data) VALUES ($1,$2) ON CONFLICT DO NOTHING`, name, data)
+		if err != nil {
+			return imported, skipped, err
+		}
+		imported += int(tag.RowsAffected())
+	}
+	return imported, skipped, nil
 }

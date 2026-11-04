@@ -100,6 +100,11 @@ func run() error {
 		return err
 	}
 	defer st.Close()
+	if imp, skip, err := st.ImportAssets(ctx); err != nil {
+		return fmt.Errorf("rewards: asset import: %w", err)
+	} else {
+		log.Printf("rewards: asset import: %d imported, %d skipped", imp, skip)
+	}
 
 	cc, err := core.Dial(env("REWARDS_CORE_ADDRESS", "127.0.0.1:20001"), env("REWARDS_CORE_HTTP_URL", "http://127.0.0.1:20000"), coreKey)
 	if err != nil {
