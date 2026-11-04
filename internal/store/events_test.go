@@ -420,7 +420,7 @@ func TestMetricsSurviveRestartAndMigrationRerun(t *testing.T) {
 func TestSwitchTitlesHaveLeaderboardMetrics(t *testing.T) {
 	s, _ := newStore(t)
 	var n int
-	if err := s.pool.QueryRow(context.Background(), `SELECT count(*) FROM metrics WHERE family='leaderboard_new_best'`).Scan(&n); err != nil || n != 26 {
+	if err := s.pool.QueryRow(context.Background(), `SELECT count(*) FROM metrics WHERE family='leaderboard_new_best'`).Scan(&n); err != nil || n != 90 {
 		t.Fatalf("leaderboard_new_best metrics: %d %v", n, err)
 	}
 }

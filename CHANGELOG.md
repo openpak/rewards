@@ -2,6 +2,10 @@
 
 `git log` stays the source of truth; this file is the readable summary.
 
+## v0.15.0 — 2026-11-04
+- Migration 0013: `leaderboard_new_best.<title>` for the 33 PS3 boards (29 titles plus the EU/JP regions of Demon's Souls and Armored Core V), the 30 Xbox 360 titles
+  (`x360:<title id>`) and `mario-kart-wii`.
+
 ## v0.14.0 — 2026-11-04
 - Migration 0012 (card #63): `leaderboard_new_best.<title>` for the 24 switch-nex Ranking/Ranking2 titles (Castle Crashers Remastered, Monopoly, TMNT Shredder's Revenge,
   Pac-Man 99, Mario Party Superstars, Mario Golf Super Rush, ARMS, SMB35, Mario Tennis Aces, Animal Crossing NH, Luigi's Mansion 3, Mario Strikers, Minecraft, Splatoon 2,
