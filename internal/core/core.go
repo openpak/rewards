@@ -307,3 +307,9 @@ func (c *Client) ResolveHandle(ctx context.Context, handle string) (string, erro
 	}
 	return resp.GetAccountId(), nil
 }
+
+// EntitlementChanged tells the universal stream that an account's game cosmetics changed (subject = game id).
+func (c *Client) EntitlementChanged(ctx context.Context, acct, game string) error {
+	_, err := c.Events.EmitEvent(c.ctx(ctx), &accountv1.EmitEventRequest{Type: "entitlement_changed", AccountId: acct, SubjectId: game})
+	return err
+}

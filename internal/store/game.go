@@ -225,6 +225,9 @@ func (s *Store) SetDeliverable(ctx context.Context, actor, itemID string, delive
 		if _, err := tx.Exec(ctx, `UPDATE game_rev SET rev=rev+1 WHERE game_id=(SELECT game_id FROM game_items WHERE item_id=$1)`, itemID); err != nil {
 			return err
 		}
+		if _, err := tx.Exec(ctx, `INSERT INTO game_outbox (account_id, game_id) SELECT account_id, game_id FROM game_rev WHERE game_id=(SELECT game_id FROM game_items WHERE item_id=$1)`, itemID); err != nil {
+			return err
+		}
 		return audit(ctx, tx, actor, "game.deliverable", itemID, fmt.Sprintf(`{"deliverable":%t}`, deliverable))
 	})
 }
@@ -263,8 +266,11 @@ func (s *Store) attachGame(ctx context.Context, items []Item) error {
 
 // bumpItem moves the account's revision for the game an item belongs to (no-op for other kinds).
 func bumpItem(ctx context.Context, d q, acct, itemID string) error {
-	_, err := d.Exec(ctx, `INSERT INTO game_rev (account_id, game_id, rev) SELECT $1, game_id, 1 FROM game_items WHERE item_id=$2
-		ON CONFLICT (account_id, game_id) DO UPDATE SET rev = game_rev.rev + 1`, acct, itemID)
+	if _, err := d.Exec(ctx, `INSERT INTO game_rev (account_id, game_id, rev) SELECT $1, game_id, 1 FROM game_items WHERE item_id=$2
+		ON CONFLICT (account_id, game_id) DO UPDATE SET rev = game_rev.rev + 1`, acct, itemID); err != nil {
+		return err
+	}
+	_, err := d.Exec(ctx, `INSERT INTO game_outbox (account_id, game_id) SELECT $1, game_id FROM game_items WHERE item_id=$2`, acct, itemID)
 	return err
 }
 
@@ -409,7 +415,42 @@ func (s *Store) GameEquip(ctx context.Context, acct, game, slot, ref string) err
 }
 
 func bumpGame(ctx context.Context, d q, acct, game string) error {
-	_, err := d.Exec(ctx, `INSERT INTO game_rev (account_id, game_id, rev) VALUES ($1,$2,1)
-		ON CONFLICT (account_id, game_id) DO UPDATE SET rev = game_rev.rev + 1`, acct, game)
+	if _, err := d.Exec(ctx, `INSERT INTO game_rev (account_id, game_id, rev) VALUES ($1,$2,1)
+		ON CONFLICT (account_id, game_id) DO UPDATE SET rev = game_rev.rev + 1`, acct, game); err != nil {
+		return err
+	}
+	_, err := d.Exec(ctx, `INSERT INTO game_outbox (account_id, game_id) VALUES ($1,$2)`, acct, game)
+	return err
+}
+
+// Announcement is one change waiting to be told to the account core.
+type Announcement struct {
+	ID      int64
+	Account string
+	Game    string
+}
+
+// PendingAnnouncements returns up to limit waiting changes, one per (account, game), oldest first. Done removes
+// every row up to and including the ids it is given for that pair.
+func (s *Store) PendingAnnouncements(ctx context.Context, limit int) ([]Announcement, error) {
+	rows, err := s.pool.Query(ctx, `SELECT max(id), account_id, game_id FROM game_outbox GROUP BY account_id, game_id ORDER BY max(id) LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Announcement
+	for rows.Next() {
+		var a Announcement
+		if err := rows.Scan(&a.ID, &a.Account, &a.Game); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+// AnnouncementDone drops the waiting rows for the pair up to the id that was announced.
+func (s *Store) AnnouncementDone(ctx context.Context, a Announcement) error {
+	_, err := s.pool.Exec(ctx, `DELETE FROM game_outbox WHERE account_id=$1 AND game_id=$2 AND id <= $3`, a.Account, a.Game, a.ID)
 	return err
 }

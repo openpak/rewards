@@ -2,6 +2,9 @@
 
 `git log` stays the source of truth; this file is the readable summary.
 
+## v0.21.0 — 2026-11-05
+- Card #141 phase 2: every change to a player's game cosmetics (grant, buy, revoke, equip, freeze, deliverable) is written to `game_outbox` (migration 0017, erased with the account) in the same transaction and announced on the account core stream as `entitlement_changed` (subject = game id; account v0.24.0). Drained every 2 s; removed only after the core accepted it.
+
 ## v0.20.0 — 2026-11-05
 - Card #141 phase 1 (game cosmetics core, migration 0016): item kind `game_cosmetic`, licence `game-native`, `game_items` (game, in-game id, slot, rarity, origin, deliverable), `game_equipped`, `game_rev`; redemption source `event`.
   Catalogue import, deliverable gate for going live, base set, adapter inventory (ETag on a per-account revision) and equip routes, revoke clears game slots, frozen accounts get the base set only. Erasure covers the new tables.

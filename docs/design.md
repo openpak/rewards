@@ -182,6 +182,7 @@ has the asset installed; set only after a test), `catalog_rev`. The item id is d
 - **Adapters.** `GET /internal/v1/adapter/inventory?account=&game=` returns owned (deliverable), equipped and base, with an ETag that follows a
   per-account, per-game revision (`game_rev`: moves on grant, revoke, equip, freeze). `PUT /internal/v1/adapter/equipped` records a slot
   (`skin`, `emote:2`); an item the account does not own answers 409 with the current state. A frozen account gets the base set only.
+- **Push.** Each change also lands in `game_outbox`; a loop announces it as `entitlement_changed` (subject = game id) on the account core event stream. Adapters drop their cache on it; their 60 s time-out is the repair.
 - **Revoke** clears the item from the game slots. **Erasure**: `game_equipped` and `game_rev` are in `purgeTables`.
 
 ## 6. Delivery per platform

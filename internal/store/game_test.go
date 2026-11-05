@@ -126,6 +126,17 @@ func TestGameBuyEquipRevokeAndErase(t *testing.T) {
 	if len(other.Owned) != 0 || other.Rev != 0 {
 		t.Fatalf("other game: %+v", other)
 	}
+	// Every change is waiting to be announced to the core, once per (account, game).
+	pend, err := s.PendingAnnouncements(ctx, 10)
+	if err != nil || len(pend) != 1 || pend[0].Account != alice || pend[0].Game != "stumble-guys" {
+		t.Fatalf("outbox: %+v %v", pend, err)
+	}
+	if err := s.AnnouncementDone(ctx, pend[0]); err != nil {
+		t.Fatal(err)
+	}
+	if pend, _ = s.PendingAnnouncements(ctx, 10); len(pend) != 0 {
+		t.Fatalf("outbox after done: %+v", pend)
+	}
 	// A frozen account gets the base set only.
 	s.SetFrozen(ctx, alice, true, "core")
 	inv, _ = s.GameInventory(ctx, alice, "stumble-guys")
@@ -160,7 +171,7 @@ func TestGameBuyEquipRevokeAndErase(t *testing.T) {
 		t.Fatal(err)
 	}
 	var n int
-	s.pool.QueryRow(ctx, `SELECT (SELECT COUNT(*) FROM game_equipped WHERE account_id=$1)+(SELECT COUNT(*) FROM game_rev WHERE account_id=$1)+(SELECT COUNT(*) FROM redemptions WHERE account_id=$1)`, alice).Scan(&n)
+	s.pool.QueryRow(ctx, `SELECT (SELECT COUNT(*) FROM game_outbox WHERE account_id=$1)+(SELECT COUNT(*) FROM game_equipped WHERE account_id=$1)+(SELECT COUNT(*) FROM game_rev WHERE account_id=$1)+(SELECT COUNT(*) FROM redemptions WHERE account_id=$1)`, alice).Scan(&n)
 	if n != 0 {
 		t.Fatalf("%d rows survived the purge", n)
 	}

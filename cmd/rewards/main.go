@@ -111,6 +111,7 @@ func run() error {
 		return err
 	}
 	go cc.Follow(ctx, st)
+	go cc.Announce(ctx, st, 2*time.Second)
 	go func() { // play from before Rewards saw each account, paid once
 		n, pts, err := st.SettleAllHistory(ctx)
 		log.Printf("rewards: play history settled: %d accounts, %d points, err=%v", n, pts, err)
