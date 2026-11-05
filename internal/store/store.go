@@ -333,3 +333,22 @@ func (s *Store) PurgeStale(ctx context.Context) error {
 	}
 	return s.purgeEvents(ctx)
 }
+
+// PlayCursorTotals is the cached core play total (seconds) per title for one account and namespace.
+func (s *Store) PlayCursorTotals(ctx context.Context, acct, ns string) (map[string]int64, error) {
+	rows, err := s.pool.Query(ctx, `SELECT title_id, total_seconds FROM play_cursor WHERE account_id=$1 AND namespace=$2`, acct, ns)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]int64{}
+	for rows.Next() {
+		var t string
+		var n int64
+		if err := rows.Scan(&t, &n); err != nil {
+			return nil, err
+		}
+		out[t] = n
+	}
+	return out, rows.Err()
+}

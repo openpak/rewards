@@ -125,6 +125,7 @@ func run() error {
 		p := &accrual.Poller{Src: cc, Store: st, Interval: interval,
 			Namespaces: strings.Split(env("REWARDS_NAMESPACES", "switch,wiiu,3ds,wfc,np,xbox360,xbox"), ",")}
 		go p.Run(ctx)
+		go accrual.RunCheck(ctx, cc, st, p.Namespaces, 10*time.Minute, 24*time.Hour)
 	}
 	go func() {
 		for {

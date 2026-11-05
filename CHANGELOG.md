@@ -2,6 +2,13 @@
 
 `git log` stays the source of truth; this file is the readable summary.
 
+## v0.18.0 — 2026-11-05
+- Card #131 phase 9 (playtime exists once): documented that `play_cursor`/`activity` are a cache of the core, not a second measurement
+  (`total_seconds` is overwritten from the core's GetPlayHistory every tick; no other writer). New consistency check at boot (+10 min) and
+  every 24 h: logs `playtime consistency: accounts titles missing differing max_diff_seconds` (counts only). New test that Purge covers every
+  table with an account_id (audit excepted). Known gap, not changed: the core caps GetPlayHistory at 20 titles per namespace, so older titles
+  never reach the cache (counted as `missing`).
+
 ## v0.17.0 — 2026-11-05
 - Migration 0015 (card #132): `game_sessions.call-of-duty-modern-warfare-3` (PS3, reported by demonware under the `np` namespace; the existing
   `np` network mapping and link resolution already cover that namespace).
