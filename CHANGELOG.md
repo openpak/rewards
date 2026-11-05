@@ -2,6 +2,9 @@
 
 `git log` stays the source of truth; this file is the readable summary.
 
+## v0.22.0 — 2026-11-05
+- Card #141: a game server reads a player's game inventory with the events key it already holds and names the player by network identity: `GET /internal/v1/adapter/inventory?namespace=switch&subject=<BAAS id>&game=dst` (resolved through the account core, cached 10 min like events; an unlinked identity owns nothing) and `PUT /internal/v1/adapter/equipped` takes the same. The inventory answers the resolved `account` so the adapter can drop its cache on `entitlement_changed`. The website's internal key still works on both routes.
+
 ## v0.21.0 — 2026-11-05
 - Card #141 phase 2: every change to a player's game cosmetics (grant, buy, revoke, equip, freeze, deliverable) is written to `game_outbox` (migration 0017, erased with the account) in the same transaction and announced on the account core stream as `entitlement_changed` (subject = game id; account v0.24.0). Drained every 2 s; removed only after the core accepted it.
 

@@ -290,6 +290,7 @@ type GameOwned struct {
 
 // GameInventory is what an adapter asks for one account and game.
 type GameInventory struct {
+	Account  string            `json:"account,omitempty"`
 	Game     string            `json:"game"`
 	Rev      int64             `json:"rev"`
 	Frozen   bool              `json:"frozen,omitempty"`

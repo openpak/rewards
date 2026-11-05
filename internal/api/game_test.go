@@ -45,4 +45,22 @@ func TestGameAdapterRoutes(t *testing.T) {
 	if tag == "" || resp.StatusCode != http.StatusNotModified {
 		t.Fatalf("etag %q -> %d", tag, resp.StatusCode)
 	}
+
+	// A game server holds the events key and names the player by network identity; an unlinked identity owns nothing.
+	ev := map[string]string{"X-Internal-Key": ekey}
+	do(t, "POST", srv.URL+"/internal/v1/admin/items/stumble-guys-skin-skin2/state", a, map[string]string{"state": "active"})
+	do(t, "POST", srv.URL+"/internal/v1/admin/accounts/"+alice+"/grant", a, map[string]string{"item_id": "stumble-guys-skin-skin2"})
+	code, m = do(t, "GET", srv.URL+"/internal/v1/adapter/inventory?namespace=wiiu&subject=1234&game=stumble-guys", ev, nil)
+	owned, _ := m["owned"].([]any)
+	if code != 200 || m["account"] != alice || len(owned) != 1 || owned[0].(map[string]any)["game_ref"] != "SKIN2" {
+		t.Fatalf("by identity: %d %v", code, m)
+	}
+	code, m = do(t, "GET", srv.URL+"/internal/v1/adapter/inventory?namespace=wiiu&subject=9999&game=stumble-guys", ev, nil)
+	owned, _ = m["owned"].([]any)
+	if code != 200 || len(owned) != 0 || m["account"] != nil {
+		t.Fatalf("unlinked: %d %v", code, m)
+	}
+	if code, _ = do(t, "GET", srv.URL+"/internal/v1/adapter/inventory?namespace=wiiu&subject=1234&game=stumble-guys", map[string]string{"X-Internal-Key": "wrong-key-wrong-key-wrong-key-wrong"}, nil); code != 401 {
+		t.Fatalf("wrong key: %d", code)
+	}
 }

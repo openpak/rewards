@@ -236,7 +236,7 @@ Keys as elsewhere: `X-Internal-Key` for adapters, `X-Admin-Key` plus `X-Admin-Ac
 
 | Route | What |
 | --- | --- |
-| `GET /internal/v1/adapter/inventory?account=&game=` | `{game, rev, frozen?, owned:[{game_ref, slot, item, source, acquired_at}], equipped:{slot:game_ref}, base:[{game_ref, slot}]}`. `ETag` follows the revision; `If-None-Match` answers 304 |
+| `GET /internal/v1/adapter/inventory?account=&game=` (or `namespace=&subject=` instead of `account`; events key or internal key) | `{game, rev, frozen?, owned:[{game_ref, slot, item, source, acquired_at}], equipped:{slot:game_ref}, base:[{game_ref, slot}]}`. `ETag` follows the revision; `If-None-Match` answers 304 |
 | `PUT /internal/v1/adapter/equipped` `{account, game, slot, game_ref}` | equip (`game_ref` empty clears). 200 with the inventory; 409 `{error, inventory}` when not owned or the wrong slot; 403 frozen |
 | `POST /internal/v1/admin/games/{game}/import` `{catalog_rev, items:[{game_ref, slot, name?, rarity?, origin?, deliverable?, price?, platforms?}]}` | upsert, up to 5000 items; answers `{created, updated, unchanged}` |
 | `POST /internal/v1/admin/items/{id}/deliverable` `{deliverable}` | mark whether the game has the asset installed |
