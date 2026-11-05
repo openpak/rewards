@@ -89,6 +89,8 @@ func (s *Server) Handler() http.Handler {
 	// Game servers hold the events key, not the website's: they may read a player's game inventory and report equips.
 	mux.HandleFunc("GET /internal/v1/adapter/inventory", s.eventsAuth(s.gameInventory))
 	mux.HandleFunc("PUT /internal/v1/adapter/equipped", s.eventsAuth(s.gameEquip))
+	mux.HandleFunc("GET /internal/v1/adapter/shop", s.eventsAuth(s.gameShop))
+	mux.HandleFunc("POST /internal/v1/adapter/redeem", s.eventsAuth(s.gameRedeem))
 
 	// Game servers: the only way a count moves.
 	mux.HandleFunc("POST /internal/v1/events", s.eventsAuth(s.events))

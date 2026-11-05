@@ -157,3 +157,89 @@ func (s *Server) adminDeliverable(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// gameShop: GET /internal/v1/adapter/shop?game=&namespace=&subject= lists what a game's own shop may sell, with the player's points.
+func (s *Server) gameShop(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	acct, ok := s.gameAccount(w, r, q.Get("account"), q.Get("namespace"), q.Get("subject"))
+	if !ok {
+		return
+	}
+	if q.Get("game") == "" {
+		msg(w, 400, "game is required")
+		return
+	}
+	items, err := s.Store.GameShop(r.Context(), acct, q.Get("game"))
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	var bal int64
+	if acct != "" {
+		if a, err := s.Store.Account(r.Context(), acct); err == nil {
+			bal = a.Balance
+		}
+	}
+	out(w, 200, map[string]any{"game": q.Get("game"), "account": acct, "balance": bal, "items": items})
+}
+
+// gameRedeem: POST /internal/v1/adapter/redeem {namespace, subject, game, game_ref, expected_price, trans_id} buys one game item for
+// points on behalf of a player, from the game's own shop. The same redemption as the website's: one ledger. Errors the game maps:
+// 402 not enough points (with the balance), 409 {code: price_mismatch | owned | not_for_sale}, 404 unlinked or unknown item.
+func (s *Server) gameRedeem(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Account       string `json:"account"`
+		Namespace     string `json:"namespace"`
+		Subject       string `json:"subject"`
+		Game          string `json:"game"`
+		GameRef       string `json:"game_ref"`
+		ExpectedPrice *int   `json:"expected_price"`
+		TransID       string `json:"trans_id"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	acct, ok := s.gameAccount(w, r, in.Account, in.Namespace, in.Subject)
+	if !ok {
+		return
+	}
+	if acct == "" {
+		msg(w, 404, "this identity is not linked to an OpenPak account")
+		return
+	}
+	id, err := s.Store.GameItemRef(r.Context(), in.Game, in.GameRef)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	it, err := s.Store.GetItem(r.Context(), id)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	if in.ExpectedPrice != nil && (it.Price == nil || *it.Price != *in.ExpectedPrice) {
+		out(w, 409, map[string]any{"error": "the price changed", "code": "price_mismatch"})
+		return
+	}
+	idem := ""
+	if in.TransID != "" {
+		idem = "game:" + in.Game + ":" + in.TransID
+	}
+	red, err := s.Store.Redeem(r.Context(), acct, id, idem)
+	switch {
+	case errors.Is(err, store.ErrInsufficient):
+		inv, _ := s.Store.GameInventory(r.Context(), acct, in.Game)
+		out(w, 402, map[string]any{"error": "not enough points", "code": "insufficient", "balance": inv.Balance})
+		return
+	case errors.Is(err, store.ErrOwned):
+		out(w, 409, map[string]any{"error": "already owned", "code": "owned"})
+		return
+	case errors.Is(err, store.ErrNotForSale), errors.Is(err, store.ErrSoldOut):
+		out(w, 409, map[string]any{"error": "not for sale", "code": "not_for_sale"})
+		return
+	case err != nil:
+		fail(w, err)
+		return
+	}
+	out(w, 200, map[string]any{"balance": red.Balance, "game_ref": in.GameRef, "item": id})
+}

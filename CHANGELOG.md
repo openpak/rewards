@@ -2,6 +2,9 @@
 
 `git log` stays the source of truth; this file is the readable summary.
 
+## v0.23.0 — 2026-11-05
+- Card #141: a game's own shop sells for points through the same ledger. `GET /internal/v1/adapter/shop?game=&namespace=&subject=` lists the items on sale (active, deliverable, priced) with the player's points; `POST /internal/v1/adapter/redeem {namespace, subject, game, game_ref, expected_price?, trans_id?}` buys one (events key): 402 `insufficient` with the balance, 409 `price_mismatch` / `owned` / `not_for_sale`, 404 unlinked; a retried `trans_id` is charged once. The inventory answer carries the player's `balance`.
+
 ## v0.22.0 — 2026-11-05
 - Card #141: a game server reads a player's game inventory with the events key it already holds and names the player by network identity: `GET /internal/v1/adapter/inventory?namespace=switch&subject=<BAAS id>&game=dst` (resolved through the account core, cached 10 min like events; an unlinked identity owns nothing) and `PUT /internal/v1/adapter/equipped` takes the same. The inventory answers the resolved `account` so the adapter can drop its cache on `entitlement_changed`. The website's internal key still works on both routes.
 

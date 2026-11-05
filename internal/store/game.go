@@ -291,6 +291,7 @@ type GameOwned struct {
 // GameInventory is what an adapter asks for one account and game.
 type GameInventory struct {
 	Account  string            `json:"account,omitempty"`
+	Balance  int64             `json:"balance"` // the account's points
 	Game     string            `json:"game"`
 	Rev      int64             `json:"rev"`
 	Frozen   bool              `json:"frozen,omitempty"`
@@ -312,6 +313,9 @@ func (s *Store) GameInventory(ctx context.Context, acct, game string) (GameInven
 		return out, err
 	}
 	out.Frozen = frozen
+	if err := s.pool.QueryRow(ctx, `SELECT balance FROM accounts WHERE account_id=$1`, acct).Scan(&out.Balance); err != nil && err != pgx.ErrNoRows {
+		return out, err
+	}
 	if err := s.pool.QueryRow(ctx, `SELECT rev FROM game_rev WHERE account_id=$1 AND game_id=$2`, acct, game).Scan(&out.Rev); err != nil && err != pgx.ErrNoRows {
 		return out, err
 	}
@@ -454,4 +458,40 @@ func (s *Store) PendingAnnouncements(ctx context.Context, limit int) ([]Announce
 func (s *Store) AnnouncementDone(ctx context.Context, a Announcement) error {
 	_, err := s.pool.Exec(ctx, `DELETE FROM game_outbox WHERE account_id=$1 AND game_id=$2 AND id <= $3`, a.Account, a.Game, a.ID)
 	return err
+}
+
+// GameItemRef finds the item for an in-game id; ErrNotFound when the game has none.
+func (s *Store) GameItemRef(ctx context.Context, game, ref string) (string, error) {
+	var id string
+	err := s.pool.QueryRow(ctx, `SELECT item_id FROM game_items WHERE game_id=$1 AND game_ref=$2`, game, ref).Scan(&id)
+	if err == pgx.ErrNoRows {
+		return "", ErrNotFound
+	}
+	return id, err
+}
+
+// GameShopItem is something a game's own shop screen may list: on sale now, deliverable, with a price in points.
+type GameShopItem struct {
+	GameRef string `json:"game_ref"`
+	Slot    string `json:"slot"`
+	Name    string `json:"name"`
+	Price   int    `json:"price"`
+	Owned   bool   `json:"owned,omitempty"`
+}
+
+// GameShop lists a game's items on sale. With acct set, items the account already owns are marked.
+func (s *Store) GameShop(ctx context.Context, acct, game string) ([]GameShopItem, error) {
+	items, err := s.Catalog(ctx, acct, KindGame, "", false)
+	if err != nil {
+		return nil, err
+	}
+	now := s.Now()
+	out := []GameShopItem{}
+	for _, it := range items {
+		if it.Game == nil || it.Game.GameID != game || !it.Game.Deliverable || !it.onSale(now) {
+			continue
+		}
+		out = append(out, GameShopItem{GameRef: it.Game.GameRef, Slot: it.Game.Slot, Name: it.Name, Price: *it.Price, Owned: it.Owned})
+	}
+	return out, nil
 }
