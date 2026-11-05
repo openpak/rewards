@@ -2,6 +2,10 @@
 
 `git log` stays the source of truth; this file is the readable summary.
 
+## v0.17.0 — 2026-11-05
+- Migration 0015 (card #132): `game_sessions.call-of-duty-modern-warfare-3` (PS3, reported by demonware under the `np` namespace; the existing
+  `np` network mapping and link resolution already cover that namespace).
+
 ## v0.16.0 — 2026-11-04
 - Card #85 (database only): reward artwork bytes live in Postgres (`asset_blobs`, migration 0014, keyed by sha256); serving reads from the database.
   Start-up imports any file in `REWARDS_ASSET_DIR` not yet in the table (counts logged, files never deleted).
