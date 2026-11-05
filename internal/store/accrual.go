@@ -394,7 +394,14 @@ func (s *Store) payHistory(ctx context.Context, tx pgx.Tx, acct string) (int, er
 		if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM ledger WHERE account_id=$1 AND source='history'`, acct).Scan(&n); err != nil {
 			return 0, err
 		}
-		ok, err := credit(ctx, tx, acct, int64(pts), "earn", "history", "", fmt.Sprintf("history:%s:%d", acct, n), "")
+		// The first payment is the account's pre-Rewards history. A later one is a catch-up for titles the
+		// core's old 20-title cap had hidden (card #131 phase 9), or a first sight in a new namespace; the
+		// ledger ref says so.
+		ref := ""
+		if n > 0 {
+			ref = fmt.Sprintf("history catch-up: %d title(s) first seen after the 20-title cap was lifted (card #131)", rows)
+		}
+		ok, err := credit(ctx, tx, acct, int64(pts), "earn", "history", ref, fmt.Sprintf("history:%s:%d", acct, n), "")
 		if err != nil || !ok {
 			return 0, err
 		}

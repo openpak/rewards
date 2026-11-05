@@ -116,11 +116,12 @@ type Title struct {
 	Sessions int
 }
 
-// History is the account's per-title server-side session time in one namespace.
+// History is the account's per-title server-side session time in one namespace: every title (limit -1,
+// account v0.23.0 and later; an older core still answers with its newest 20).
 func (c *Client) History(ctx context.Context, account, namespace string) ([]Title, error) {
 	rctx, cancel := context.WithTimeout(c.ctx(ctx), 10*time.Second)
 	defer cancel()
-	resp, err := c.Sessions.GetPlayHistory(rctx, &accountv1.GetPlayHistoryRequest{AccountId: account, Namespace: namespace, Limit: 20})
+	resp, err := c.Sessions.GetPlayHistory(rctx, &accountv1.GetPlayHistoryRequest{AccountId: account, Namespace: namespace, Limit: -1})
 	if err != nil {
 		return nil, err
 	}

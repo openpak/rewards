@@ -2,6 +2,12 @@
 
 `git log` stays the source of truth; this file is the readable summary.
 
+## v0.19.0 — 2026-11-05
+- Card #131 phase 9, owner decision: the 20-title cap is lifted. History asks the core for every title (`limit = -1`, account v0.23.0). Titles that were hidden
+  by the cap get a play_cursor row on first sight and are paid once through the normal history rule (`payHistory`); titles already counted keep their cursor
+  and are not paid again. A second or later `history` payment carries a ledger `ref` naming it a catch-up. No ledger row is written by hand.
+- Cursors stay fresh because every title is now returned each tick, so the 180-day stale purge cannot drop a counted title and re-pay it.
+
 ## v0.18.0 — 2026-11-05
 - Card #131 phase 9 (playtime exists once): documented that `play_cursor`/`activity` are a cache of the core, not a second measurement
   (`total_seconds` is overwritten from the core's GetPlayHistory every tick; no other writer). New consistency check at boot (+10 min) and
