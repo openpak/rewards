@@ -229,3 +229,16 @@ as a mission reward, or granted by an admin or the event/supporter grant API) is
 preview (`REWARDS_PUBLIC_URL`/v1/items/{id}/preview). The `event_id` is `badge:<account>:<item>:<why>` where why is the
 redemption id, the mission and period, or `g` for a grant, so a retry never posts twice. Nothing is posted unless the player
 turned activity posts on in OpenVerse. A failure is logged and never fails the request. Items of other kinds are not reported.
+
+## Game cosmetics (adapters and admin)
+
+Keys as elsewhere: `X-Internal-Key` for adapters, `X-Admin-Key` plus `X-Admin-Actor` for admin. See design section 5a.
+
+| Route | What |
+| --- | --- |
+| `GET /internal/v1/adapter/inventory?account=&game=` | `{game, rev, frozen?, owned:[{game_ref, slot, item, source, acquired_at}], equipped:{slot:game_ref}, base:[{game_ref, slot}]}`. `ETag` follows the revision; `If-None-Match` answers 304 |
+| `PUT /internal/v1/adapter/equipped` `{account, game, slot, game_ref}` | equip (`game_ref` empty clears). 200 with the inventory; 409 `{error, inventory}` when not owned or the wrong slot; 403 frozen |
+| `POST /internal/v1/admin/games/{game}/import` `{catalog_rev, items:[{game_ref, slot, name?, rarity?, origin?, deliverable?, price?, platforms?}]}` | upsert, up to 5000 items; answers `{created, updated, unchanged}` |
+| `POST /internal/v1/admin/items/{id}/deliverable` `{deliverable}` | mark whether the game has the asset installed |
+
+Catalogue and inventory items of this kind carry `game: {game_id, game_ref, slot, rarity, origin, deliverable}`.

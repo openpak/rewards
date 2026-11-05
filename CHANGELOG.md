@@ -2,6 +2,10 @@
 
 `git log` stays the source of truth; this file is the readable summary.
 
+## v0.20.0 — 2026-11-05
+- Card #141 phase 1 (game cosmetics core, migration 0016): item kind `game_cosmetic`, licence `game-native`, `game_items` (game, in-game id, slot, rarity, origin, deliverable), `game_equipped`, `game_rev`; redemption source `event`.
+  Catalogue import, deliverable gate for going live, base set, adapter inventory (ETag on a per-account revision) and equip routes, revoke clears game slots, frozen accounts get the base set only. Erasure covers the new tables.
+
 ## v0.19.0 — 2026-11-05
 - Card #131 phase 9, owner decision: the 20-title cap is lifted. History asks the core for every title (`limit = -1`, account v0.23.0). Titles that were hidden
   by the cap get a play_cursor row on first sight and are paid once through the normal history rule (`payHistory`); titles already counted keep their cursor

@@ -288,6 +288,10 @@ func (s *Store) SetFrozen(ctx context.Context, acct string, frozen bool, actor s
 		if _, err := tx.Exec(ctx, `UPDATE accounts SET frozen = $2 WHERE account_id = $1`, acct, frozen); err != nil {
 			return err
 		}
+		// Adapters cache an inventory against this counter: a ban or unban changes what they may serve.
+		if _, err := tx.Exec(ctx, `UPDATE game_rev SET rev = rev + 1 WHERE account_id = $1`, acct); err != nil {
+			return err
+		}
 		act := "freeze"
 		if !frozen {
 			act = "unfreeze"
@@ -296,7 +300,7 @@ func (s *Store) SetFrozen(ctx context.Context, acct string, frozen bool, actor s
 	})
 }
 
-var purgeTables = []string{"accounts", "ledger", "play_cursor", "history_days", "daily_earn", "activity", "titles_credited", "mission_progress", "metric_counts", "metric_daily", "metric_keys", "events", "redemptions", "equipped", "flags"}
+var purgeTables = []string{"accounts", "ledger", "play_cursor", "history_days", "daily_earn", "activity", "titles_credited", "mission_progress", "metric_counts", "metric_daily", "metric_keys", "events", "redemptions", "equipped", "game_equipped", "game_rev", "flags"}
 
 // Purge erases everything held about an account: the user's own DELETE /v1/me and the core's
 // account_deleted event. The audit trail keeps only the admin actions, which name the id.

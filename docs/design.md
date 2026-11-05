@@ -15,7 +15,8 @@ changing one is not a rewrite.
 2. **Cosmetic only.** Rewards never change gameplay, matchmaking, quotas, bans or access. No
    pay-to-win, no cash value, not transferable, not purchasable with money.
 3. **OpenPak-made assets only.** No Nintendo, Sony or Microsoft art, logos, character likenesses,
-   fonts, console UI screenshots or trademarked names in any reward. See section 5.
+   fonts, console UI screenshots or trademarked names in any reward. See section 5. The one exception is a
+   *game cosmetic* (section 5a): OpenPak hosts no art for it; it names an item already in the player's own installed game.
 4. **One ledger, no hidden state.** Every balance change is a row in an append-only ledger with a
    reason and a unique idempotency key. The balance is a cache of the ledger and can be rebuilt.
 5. **Boring and cheap.** One Go service, one Postgres database, polling the account core. No new
@@ -163,6 +164,25 @@ Owning an item is permanent; an item taken out of the shop stays in inventories.
 
 Starter catalogue: the migration seeds missions only. Items are created `draft` by the admin once
 the art exists; no item goes live without an asset and a licence line.
+
+## 5a. Game cosmetics (card #141)
+
+Plan: `prds/repos/rewards-game-cosmetics-plan.md`. Nothing is ever sold for money: every item is earned or bought with points.
+
+An item of kind `game_cosmetic` stands for one in-game id of one hosted game (Stumble Guys skins, Don't Starve Together skins,
+Xbox 360 avatar awards). It has licence `game-native`, no asset, and a `game_items` row: `game_id`, `game_ref` (the in-game id, case kept),
+`game_slot` (skin, emote, footsteps, ...), `rarity`, `origin` (base, earned, store, event, promo, openpak), `deliverable` (the game really
+has the asset installed; set only after a test), `catalog_rev`. The item id is derived: `<game>-<slot>-<slug of game_ref>`.
+
+- **Import.** `POST /internal/v1/admin/games/{game}/import` upserts a game's generated catalogue. New rows are drafts priced by rarity
+  (common 30, rare 80, epic 200, legendary 400; base and event items not sold). Re-imports keep state and stock. An item goes `active` only when
+  `deliverable`, and the shop shows only deliverable ones.
+- **Base set.** `origin = base` active items belong to every account without a redemption row.
+- **Unlock routes.** The ordinary ones: points (`/v1/me/redeem`), a mission or ladder tier `reward_item`, an event mission, an admin grant.
+- **Adapters.** `GET /internal/v1/adapter/inventory?account=&game=` returns owned (deliverable), equipped and base, with an ETag that follows a
+  per-account, per-game revision (`game_rev`: moves on grant, revoke, equip, freeze). `PUT /internal/v1/adapter/equipped` records a slot
+  (`skin`, `emote:2`); an item the account does not own answers 409 with the current state. A frozen account gets the base set only.
+- **Revoke** clears the item from the game slots. **Erasure**: `game_equipped` and `game_rev` are in `purgeTables`.
 
 ## 6. Delivery per platform
 

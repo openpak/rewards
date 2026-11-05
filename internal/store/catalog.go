@@ -42,6 +42,7 @@ type Item struct {
 	Owned           bool       `json:"owned,omitempty"`
 	Affordable      bool       `json:"affordable,omitempty"`
 	HasPreview      bool       `json:"has_preview"`
+	Game            *GameInfo  `json:"game,omitempty"` // game cosmetics only
 }
 
 const itemCols = `i.id, i.kind, i.name, i.description, i.price, i.platforms, i.stock, i.available_from, i.available_until, i.limit_per_account, i.license, i.state,
@@ -100,9 +101,15 @@ func (s *Store) Catalog(ctx context.Context, acct, kind, platform string, all bo
 			owned[id] = n
 		}
 	}
+	if err := s.attachGame(ctx, items); err != nil {
+		return nil, err
+	}
 	now := s.Now()
 	out := []Item{}
 	for _, it := range items {
+		if !all && it.Game != nil && !it.Game.Deliverable {
+			continue
+		}
 		// Owned items stay visible even when retired, so the inventory page can render them.
 		if !all && !it.onSale(now) && (owned[it.ID] == 0 || it.State == "draft") {
 			continue
@@ -171,6 +178,9 @@ func (s *Store) UpsertItem(ctx context.Context, actor string, it Item) error {
 	if !idRe.MatchString(it.ID) {
 		return invalid("id must be 2-63 characters of a-z, 0-9 and -")
 	}
+	if it.Kind == KindGame {
+		return invalid("game cosmetics come from a catalogue import")
+	}
 	if !slices.Contains(Kinds, it.Kind) {
 		return invalid("unknown kind")
 	}
@@ -220,7 +230,16 @@ func (s *Store) SetItemState(ctx context.Context, actor, id, state string) error
 		} else if err != nil {
 			return err
 		}
-		if state == "active" && kind != "title" {
+		if state == "active" && kind == KindGame {
+			// OpenPak hosts no art for a game cosmetic: it needs the game to really have it.
+			var ok bool
+			if err := tx.QueryRow(ctx, `SELECT deliverable FROM game_items WHERE item_id=$1`, id).Scan(&ok); err != nil {
+				return err
+			}
+			if !ok {
+				return invalid("this item is not marked deliverable: check it in the game first")
+			}
+		} else if state == "active" && kind != "title" {
 			if len(plats) == 0 {
 				return invalid("list at least one platform before activating")
 			}
@@ -360,6 +379,13 @@ func (s *Store) Redeem(ctx context.Context, acct, itemID, idem string) (Redempti
 		if !it.onSale(now) {
 			return ErrNotForSale
 		}
+		var undeliverable bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM game_items WHERE item_id=$1 AND NOT deliverable)`, itemID).Scan(&undeliverable); err != nil {
+			return err
+		}
+		if undeliverable {
+			return ErrNotForSale
+		}
 		var have int
 		if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM redemptions WHERE account_id=$1 AND item_id=$2 AND state='granted'`, acct, itemID).Scan(&have); err != nil {
 			return err
@@ -389,6 +415,9 @@ func (s *Store) Redeem(ctx context.Context, acct, itemID, idem string) (Redempti
 				return err
 			}
 		}
+		if err := bumpItem(ctx, tx, acct, itemID); err != nil {
+			return err
+		}
 		out.Balance = a.Balance - int64(*it.Price)
 		return nil
 	})
@@ -411,7 +440,10 @@ func (s *Store) grant(ctx context.Context, tx pgx.Tx, acct, itemID, source, idem
 		return false, nil
 	}
 	tag, err := tx.Exec(ctx, `INSERT INTO redemptions (account_id, item_id, price, source, idem_key) VALUES ($1,$2,0,$3,$4) ON CONFLICT (idem_key) DO NOTHING`, acct, itemID, source, "grant:"+idem)
-	return err == nil && tag.RowsAffected() == 1, err
+	if err != nil || tag.RowsAffected() != 1 {
+		return false, err
+	}
+	return true, bumpItem(ctx, tx, acct, itemID)
 }
 
 // AdminGrant gives an item to an account (audited).
@@ -456,6 +488,14 @@ func (s *Store) Revoke(ctx context.Context, actor string, redemption int64, refu
 				return err
 			}
 		}
+		if left == 0 {
+			if _, err := tx.Exec(ctx, `DELETE FROM game_equipped WHERE account_id=$1 AND item_id=$2`, acct, item); err != nil {
+				return err
+			}
+		}
+		if err := bumpItem(ctx, tx, acct, item); err != nil {
+			return err
+		}
 		if refund && price > 0 {
 			if _, err := credit(ctx, tx, acct, int64(price), "reverse", "revoke", item, "revoke:"+strconv.FormatInt(redemption, 10), actor); err != nil {
 				return err
@@ -490,7 +530,21 @@ func (s *Store) Inventory(ctx context.Context, acct string) ([]InventoryItem, er
 		x.Owned = true
 		out = append(out, x)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	items := make([]Item, len(out))
+	for i := range out {
+		items[i] = out[i].Item
+	}
+	if err := s.attachGame(ctx, items); err != nil {
+		return nil, err
+	}
+	for i := range out {
+		out[i].Item.Game = items[i].Game
+	}
+	return out, nil
 }
 
 // Equip puts an owned item in the slot named after its kind.
