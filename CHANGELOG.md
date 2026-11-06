@@ -2,6 +2,10 @@
 
 `git log` stays the source of truth; this file is the readable summary.
 
+## v0.27.2 -- 2026-11-06
+
+- Card #150: tests only. `TestDSTWholeCatalogueFollowsTheGamesRules` (set `REWARDS_DST_CATALOG` to klei `tools/catalog/dst-packs-import.json`) activates every chest, buys all 481 in dependency order under the requirement rule, and checks the inventory.
+
 ## v0.27.0 — 2026-11-06
 - Card #150: the game's own purchase rules. A game item carries `grants` (the in-game keys owning it gives: a DST chest's skins) and `requires` (keys the buyer must already hold: a chest with Wanda skins needs Wanda, as in the game's Shop). `Redeem` refuses with 409 `requires` until the buyer owns an item whose `game_ref` or `grants` holds each key; the shop list marks such items `locked` for that player. The admin import accepts `grants` and `requires`. Items whose origin is `event` can never be activated: what the game hands out by playing is not sold. Migration 0018.
 

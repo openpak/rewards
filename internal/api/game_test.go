@@ -2,8 +2,12 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
+	"os"
 	"testing"
+
+	"github.com/openpak/rewards/internal/store"
 )
 
 func TestGameAdapterRoutes(t *testing.T) {
@@ -176,5 +180,102 @@ func TestGameRedeemFollowsTheGamesRequirements(t *testing.T) {
 	code, m = do(t, "GET", srv.URL+"/internal/v1/adapter/inventory?namespace=wiiu&subject=1234&game=dst", ev, nil)
 	if owned, _ := m["owned"].([]any); code != 200 || len(owned) != 2 {
 		t.Fatalf("inventory: %d %v", code, m)
+	}
+}
+
+// The whole Don't Starve Together chest catalogue (REWARDS_DST_CATALOG = klei tools/catalog/dst-packs-import.json): every
+// chest the game sold can be activated, none of the picture-less gift chests is on sale, the game's rule holds for each
+// purchase (a chest with a locked character's skins is refused until a chest giving the character is owned), and once
+// everything is bought the player's inventory holds every chest. Skipped when the file is not given.
+func TestDSTWholeCatalogueFollowsTheGamesRules(t *testing.T) {
+	path := os.Getenv("REWARDS_DST_CATALOG")
+	if path == "" {
+		t.Skip("REWARDS_DST_CATALOG not set")
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cat struct {
+		Items []struct {
+			GameRef  string   `json:"game_ref"`
+			Origin   string   `json:"origin"`
+			Grants   []string `json:"grants"`
+			Requires []string `json:"requires"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(raw, &cat); err != nil {
+		t.Fatal(err)
+	}
+	srv, st := setup(t)
+	a := map[string]string{"X-Admin-Key": akey, "X-Admin-Actor": admin}
+	ev := map[string]string{"X-Internal-Key": ekey}
+	var imp struct {
+		Rev   string            `json:"catalog_rev"`
+		Items []json.RawMessage `json:"items"`
+	}
+	json.Unmarshal(raw, &imp)
+	for i := 0; i < len(imp.Items); i += 40 { // the admin body limit is 64 KiB
+		if code, m := do(t, "POST", srv.URL+"/internal/v1/admin/games/dst/import", a, map[string]any{"catalog_rev": "r", "items": imp.Items[i:min(i+40, len(imp.Items))]}); code != 200 {
+			t.Fatalf("import: %d %v", code, m)
+		}
+	}
+	idOf := func(ref string) string { return store.GameItemID("dst", "pack", ref) }
+	var sold, gifts []string
+	for _, it := range cat.Items {
+		if it.Origin == "store" {
+			sold = append(sold, it.GameRef)
+		} else {
+			gifts = append(gifts, it.GameRef)
+		}
+	}
+	for _, ref := range sold {
+		putArt(t, srv.URL, a, idOf(ref))
+		if code, m := do(t, "POST", srv.URL+"/internal/v1/admin/items/"+idOf(ref)+"/state", a, map[string]string{"state": "active"}); code != 204 {
+			t.Fatalf("activate %s: %d %v", ref, code, m)
+		}
+	}
+	for _, ref := range gifts { // no picture, earned: they cannot go on sale
+		if code, _ := do(t, "POST", srv.URL+"/internal/v1/admin/items/"+idOf(ref)+"/state", a, map[string]string{"state": "active"}); code == 204 {
+			t.Fatalf("gift chest %s went live", ref)
+		}
+	}
+	for i := 0; i < 100; i++ { // an admin adjustment is bounded; the chests cost about 90,000 points in all
+		if _, err := st.Adjust(context.Background(), admin, alice, 1000, "test"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	held := map[string]bool{} // in-game keys the player holds
+	bought := map[string]bool{}
+	for pass := 0; pass < 6 && len(bought) < len(sold); pass++ {
+		for _, it := range cat.Items {
+			if it.Origin != "store" || bought[it.GameRef] {
+				continue
+			}
+			ok := true
+			for _, r := range it.Requires {
+				ok = ok && held[r]
+			}
+			code, m := do(t, "POST", srv.URL+"/internal/v1/adapter/redeem", ev, map[string]any{"namespace": "wiiu", "subject": "1234", "game": "dst", "game_ref": it.GameRef, "trans_id": "t-" + it.GameRef})
+			if ok && code != 200 {
+				t.Fatalf("%s should be buyable: %d %v", it.GameRef, code, m)
+			}
+			if !ok && (code != 409 || m["code"] != "requires") {
+				t.Fatalf("%s needs %v first: %d %v", it.GameRef, it.Requires, code, m)
+			}
+			if code == 200 {
+				bought[it.GameRef] = true
+				for _, g := range it.Grants {
+					held[g] = true
+				}
+			}
+		}
+	}
+	if len(bought) != len(sold) {
+		t.Fatalf("bought %d of %d chests", len(bought), len(sold))
+	}
+	code, m := do(t, "GET", srv.URL+"/internal/v1/adapter/inventory?namespace=wiiu&subject=1234&game=dst", ev, nil)
+	if owned, _ := m["owned"].([]any); code != 200 || len(owned) != len(sold) {
+		t.Fatalf("inventory holds %d of %d chests (%d)", len(owned), len(sold), code)
 	}
 }
