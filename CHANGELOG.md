@@ -2,6 +2,9 @@
 
 `git log` stays the source of truth; this file is the readable summary.
 
+## v0.24.0 — 2026-11-06
+- Card #148: `GET /internal/v1/adapter/shop` without `game` lists every game's items on sale (each item now carries `game`), so a console shop can show game cosmetics next to its homebrew. Same ledger, points only.
+
 ## v0.23.0 — 2026-11-05
 - Card #141: a game's own shop sells for points through the same ledger. `GET /internal/v1/adapter/shop?game=&namespace=&subject=` lists the items on sale (active, deliverable, priced) with the player's points; `POST /internal/v1/adapter/redeem {namespace, subject, game, game_ref, expected_price?, trans_id?}` buys one (events key): 402 `insufficient` with the balance, 409 `price_mismatch` / `owned` / `not_for_sale`, 404 unlinked; a retried `trans_id` is charged once. The inventory answer carries the player's `balance`.
 
