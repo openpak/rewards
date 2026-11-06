@@ -134,3 +134,47 @@ func putArt(t *testing.T, base string, a map[string]string, ids ...string) {
 		}
 	}
 }
+
+// The game's own rule over the adapter: a chest with Wanda skins is refused until a chest that gives Wanda is owned, and the
+// buyer's inventory then lists both chests.
+func TestGameRedeemFollowsTheGamesRequirements(t *testing.T) {
+	srv, st := setup(t)
+	a := map[string]string{"X-Admin-Key": akey, "X-Admin-Actor": admin}
+	ev := map[string]string{"X-Internal-Key": ekey}
+	do(t, "POST", srv.URL+"/internal/v1/admin/games/dst/import", a, map[string]any{"catalog_rev": "r", "items": []map[string]any{
+		{"game_ref": "pack_character_wanda", "slot": "pack", "name": "Wanda", "rarity": "epic", "origin": "store", "deliverable": true, "grants": []string{"wanda_none"}},
+		{"game_ref": "pack_wanda_x", "slot": "pack", "name": "Wanda X", "rarity": "epic", "origin": "store", "deliverable": true, "requires": []string{"wanda_none"}}}})
+	putArt(t, srv.URL, a, "dst-pack-pack-character-wanda", "dst-pack-pack-wanda-x")
+	for _, id := range []string{"dst-pack-pack-character-wanda", "dst-pack-pack-wanda-x"} {
+		if code, m := do(t, "POST", srv.URL+"/internal/v1/admin/items/"+id+"/state", a, map[string]string{"state": "active"}); code != 204 {
+			t.Fatalf("activate %s: %d %v", id, code, m)
+		}
+	}
+	st.Adjust(context.Background(), admin, alice, 1000, "test")
+	buy := func(ref, trans string) (int, map[string]any) {
+		return do(t, "POST", srv.URL+"/internal/v1/adapter/redeem", ev, map[string]any{"namespace": "wiiu", "subject": "1234", "game": "dst", "game_ref": ref, "trans_id": trans})
+	}
+	if code, m := buy("pack_wanda_x", "a"); code != 409 || m["code"] != "requires" {
+		t.Fatalf("without Wanda: %d %v", code, m)
+	}
+	code, m := do(t, "GET", srv.URL+"/internal/v1/adapter/shop?namespace=wiiu&subject=1234&game=dst", ev, nil)
+	locked := 0
+	for _, it := range m["items"].([]any) {
+		if l, _ := it.(map[string]any)["locked"].([]any); len(l) == 1 && l[0] == "wanda_none" {
+			locked++
+		}
+	}
+	if code != 200 || locked != 1 {
+		t.Fatalf("shop should mark the Wanda chest locked once: %d %v", code, m)
+	}
+	if code, m := buy("pack_character_wanda", "b"); code != 200 {
+		t.Fatalf("Wanda: %d %v", code, m)
+	}
+	if code, m := buy("pack_wanda_x", "c"); code != 200 {
+		t.Fatalf("with Wanda: %d %v", code, m)
+	}
+	code, m = do(t, "GET", srv.URL+"/internal/v1/adapter/inventory?namespace=wiiu&subject=1234&game=dst", ev, nil)
+	if owned, _ := m["owned"].([]any); code != 200 || len(owned) != 2 {
+		t.Fatalf("inventory: %d %v", code, m)
+	}
+}
