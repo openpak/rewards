@@ -472,6 +472,8 @@ func (s *Store) GameItemRef(ctx context.Context, game, ref string) (string, erro
 
 // GameShopItem is something a game's own shop screen may list: on sale now, deliverable, with a price in points.
 type GameShopItem struct {
+	Item    string `json:"item"`          // the ledger item id; its art is GET /v1/items/{item}/preview
+	Art     bool   `json:"art,omitempty"` // the item has preview art
 	Game    string `json:"game"`
 	GameRef string `json:"game_ref"`
 	Slot    string `json:"slot"`
@@ -492,7 +494,7 @@ func (s *Store) GameShop(ctx context.Context, acct, game string) ([]GameShopItem
 		if it.Game == nil || (game != "" && it.Game.GameID != game) || !it.Game.Deliverable || !it.onSale(now) {
 			continue
 		}
-		out = append(out, GameShopItem{Game: it.Game.GameID, GameRef: it.Game.GameRef, Slot: it.Game.Slot, Name: it.Name, Price: *it.Price, Owned: it.Owned})
+		out = append(out, GameShopItem{Item: it.ID, Art: it.HasPreview, Game: it.Game.GameID, GameRef: it.Game.GameRef, Slot: it.Game.Slot, Name: it.Name, Price: *it.Price, Owned: it.Owned})
 	}
 	return out, nil
 }

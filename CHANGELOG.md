@@ -2,6 +2,9 @@
 
 `git log` stays the source of truth; this file is the readable summary.
 
+## v0.25.0 — 2026-11-06
+- Card #148: adapter shop items carry `item` (the ledger item id) and `art` (the item has preview art, served at `GET /v1/items/{item}/preview`), so a console shop can show each pack's own picture.
+
 ## v0.24.0 — 2026-11-06
 - Card #148: `GET /internal/v1/adapter/shop` without `game` lists every game's items on sale (each item now carries `game`), so a console shop can show game cosmetics next to its homebrew. Same ledger, points only.
 
