@@ -239,6 +239,14 @@ func (s *Store) SetItemState(ctx context.Context, actor, id, state string) error
 			if !ok {
 				return invalid("this item is not marked deliverable: check it in the game first")
 			}
+			// Every item has its own picture in the shops: no art, no listing.
+			var prev int
+			if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM item_assets WHERE item_id=$1 AND role='preview'`, id).Scan(&prev); err != nil {
+				return err
+			}
+			if prev == 0 {
+				return invalid("upload the item's own picture (preview) before activating")
+			}
 		} else if state == "active" && kind != "title" {
 			if len(plats) == 0 {
 				return invalid("list at least one platform before activating")

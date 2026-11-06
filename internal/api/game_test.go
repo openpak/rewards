@@ -17,6 +17,7 @@ func TestGameAdapterRoutes(t *testing.T) {
 	if code != 200 || m["created"] != float64(2) {
 		t.Fatalf("import: %d %v", code, m)
 	}
+	putArt(t, srv.URL, a, "stumble-guys-skin-skin1", "stumble-guys-skin-skin2")
 	do(t, "POST", srv.URL+"/internal/v1/admin/items/stumble-guys-skin-skin1/state", a, map[string]string{"state": "active"})
 	if code, _ = do(t, "GET", srv.URL+"/internal/v1/adapter/inventory?account="+alice+"&game=stumble-guys", nil, nil); code != 401 {
 		t.Fatalf("no key: %d", code)
@@ -75,6 +76,7 @@ func TestGameShopAndRedeem(t *testing.T) {
 	do(t, "POST", srv.URL+"/internal/v1/admin/games/dst/import", a, map[string]any{"catalog_rev": "r", "items": []map[string]any{
 		{"game_ref": "pack_x", "slot": "pack", "name": "X Chest", "rarity": "rare", "deliverable": true, "price": price},
 		{"game_ref": "pack_hidden", "slot": "pack", "name": "Not yet", "rarity": "rare", "deliverable": true}}})
+	putArt(t, srv.URL, a, "dst-pack-pack-x")
 	do(t, "POST", srv.URL+"/internal/v1/admin/items/dst-pack-pack-x/state", a, map[string]string{"state": "active"})
 	q := "?namespace=wiiu&subject=1234&game=dst"
 	code, m := do(t, "GET", srv.URL+"/internal/v1/adapter/shop"+q, ev, nil)
@@ -116,5 +118,19 @@ func TestGameShopAndRedeem(t *testing.T) {
 	}
 	if code, m = do(t, "POST", srv.URL+"/internal/v1/adapter/redeem", ev, map[string]any{"namespace": "wiiu", "subject": "9999", "game": "dst", "game_ref": "pack_x"}); code != 404 {
 		t.Fatalf("unlinked: %d %v", code, m)
+	}
+}
+
+// putArt gives each item its own picture: a game item cannot go live without one.
+func putArt(t *testing.T, base string, a map[string]string, ids ...string) {
+	t.Helper()
+	for _, id := range ids {
+		h := map[string]string{"Content-Type": "image/png"}
+		for k, v := range a {
+			h[k] = v
+		}
+		if code, m := do(t, "PUT", base+"/internal/v1/admin/items/"+id+"/asset?platform=web&role=preview", h, []byte("png")); code != 200 {
+			t.Fatalf("art %s: %d %v", id, code, m)
+		}
 	}
 }

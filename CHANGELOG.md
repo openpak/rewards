@@ -2,6 +2,9 @@
 
 `git log` stays the source of truth; this file is the readable summary.
 
+## v0.26.0 — 2026-11-06
+- Cards #141/#148 (owner rule 2026-11-06): every game item has its own picture. A game cosmetic cannot go active without a preview in the ledger (`item_assets`, role `preview`); the art for the 806 DST items found in the game files is imported as data, not by this code.
+
 ## v0.25.0 — 2026-11-06
 - Card #148: adapter shop items carry `item` (the ledger item id) and `art` (the item has preview art, served at `GET /v1/items/{item}/preview`), so a console shop can show each pack's own picture.
 
