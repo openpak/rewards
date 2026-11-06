@@ -50,6 +50,8 @@ type GameInfo struct {
 	Origin      string     `json:"origin"`
 	Deliverable bool       `json:"deliverable"`
 	VerifiedAt  *time.Time `json:"verified_at,omitempty"`
+	Grants      []string   `json:"grants,omitempty"`   // in-game keys owning this item gives (a chest's contents)
+	Requires    []string   `json:"requires,omitempty"` // in-game keys the buyer must already hold (the game's purchase rules)
 }
 
 // GameItemIn is one row of a game's catalogue import.
@@ -60,6 +62,8 @@ type GameItemIn struct {
 	Rarity      string   `json:"rarity"`
 	Origin      string   `json:"origin"`
 	Deliverable *bool    `json:"deliverable"`
+	Grants      []string `json:"grants"`
+	Requires    []string `json:"requires"`
 	Price       *int     `json:"price"`
 	Platforms   []string `json:"platforms"`
 }
@@ -164,8 +168,8 @@ func (s *Store) ImportGameItems(ctx context.Context, actor, game, catalogRev str
 					id, KindGame, name, price, plats); err != nil {
 					return err
 				}
-				if _, err := tx.Exec(ctx, `INSERT INTO game_items (item_id, game_id, game_ref, game_slot, rarity, origin, deliverable, verified_at, catalog_rev)
-					VALUES ($1,$2,$3,$4,$5,$6,$7,CASE WHEN $7 THEN now() END,$8)`, id, game, x.GameRef, x.Slot, x.Rarity, x.Origin, deliv, catalogRev); err != nil {
+				if _, err := tx.Exec(ctx, `INSERT INTO game_items (item_id, game_id, game_ref, game_slot, rarity, origin, deliverable, verified_at, catalog_rev, grants, requires)
+					VALUES ($1,$2,$3,$4,$5,$6,$7,CASE WHEN $7 THEN now() END,$8,COALESCE($9::text[],'{}'),COALESCE($10::text[],'{}'))`, id, game, x.GameRef, x.Slot, x.Rarity, x.Origin, deliv, catalogRev, x.Grants, x.Requires); err != nil {
 					return err
 				}
 				res.Created++
@@ -174,9 +178,10 @@ func (s *Store) ImportGameItems(ctx context.Context, actor, game, catalogRev str
 			// Existing: refresh what the generator knows; keep what an admin set.
 			var changed int64
 			t, err := tx.Exec(ctx, `UPDATE game_items SET game_slot=$2, rarity=$3, origin=$4, catalog_rev=$5,
-				deliverable = COALESCE($6, deliverable), verified_at = CASE WHEN $6 IS TRUE AND NOT deliverable THEN now() ELSE verified_at END
-				WHERE item_id=$1 AND (game_slot,rarity,origin,catalog_rev,deliverable) IS DISTINCT FROM ($2,$3,$4,$5,COALESCE($6,deliverable))`,
-				id, x.Slot, x.Rarity, x.Origin, catalogRev, x.Deliverable)
+				deliverable = COALESCE($6, deliverable), verified_at = CASE WHEN $6 IS TRUE AND NOT deliverable THEN now() ELSE verified_at END,
+				grants = COALESCE($7::text[], grants), requires = COALESCE($8::text[], requires)
+				WHERE item_id=$1 AND (game_slot,rarity,origin,catalog_rev,deliverable,grants,requires) IS DISTINCT FROM ($2,$3,$4,$5,COALESCE($6,deliverable),COALESCE($7::text[],grants),COALESCE($8::text[],requires))`,
+				id, x.Slot, x.Rarity, x.Origin, catalogRev, x.Deliverable, x.Grants, x.Requires)
 			if err != nil {
 				return err
 			}
@@ -245,7 +250,7 @@ func (s *Store) attachGame(ctx context.Context, items []Item) error {
 	if len(ids) == 0 {
 		return nil
 	}
-	rows, err := s.pool.Query(ctx, `SELECT item_id, game_id, game_ref, game_slot, rarity, origin, deliverable, verified_at FROM game_items WHERE item_id = ANY($1)`, ids)
+	rows, err := s.pool.Query(ctx, `SELECT item_id, game_id, game_ref, game_slot, rarity, origin, deliverable, verified_at, grants, requires FROM game_items WHERE item_id = ANY($1)`, ids)
 	if err != nil {
 		return err
 	}
@@ -253,7 +258,7 @@ func (s *Store) attachGame(ctx context.Context, items []Item) error {
 	for rows.Next() {
 		var id string
 		var g GameInfo
-		if err := rows.Scan(&id, &g.GameID, &g.GameRef, &g.Slot, &g.Rarity, &g.Origin, &g.Deliverable, &g.VerifiedAt); err != nil {
+		if err := rows.Scan(&id, &g.GameID, &g.GameRef, &g.Slot, &g.Rarity, &g.Origin, &g.Deliverable, &g.VerifiedAt, &g.Grants, &g.Requires); err != nil {
 			return err
 		}
 		for _, i := range idx[id] {
@@ -472,14 +477,15 @@ func (s *Store) GameItemRef(ctx context.Context, game, ref string) (string, erro
 
 // GameShopItem is something a game's own shop screen may list: on sale now, deliverable, with a price in points.
 type GameShopItem struct {
-	Item    string `json:"item"`          // the ledger item id; its art is GET /v1/items/{item}/preview
-	Art     bool   `json:"art,omitempty"` // the item has preview art
-	Game    string `json:"game"`
-	GameRef string `json:"game_ref"`
-	Slot    string `json:"slot"`
-	Name    string `json:"name"`
-	Price   int    `json:"price"`
-	Owned   bool   `json:"owned,omitempty"`
+	Item    string   `json:"item"`          // the ledger item id; its art is GET /v1/items/{item}/preview
+	Art     bool     `json:"art,omitempty"` // the item has preview art
+	Game    string   `json:"game"`
+	GameRef string   `json:"game_ref"`
+	Slot    string   `json:"slot"`
+	Name    string   `json:"name"`
+	Price   int      `json:"price"`
+	Owned   bool     `json:"owned,omitempty"`
+	Locked  []string `json:"locked,omitempty"` // in-game keys the game still wants the player to hold before this can be bought
 }
 
 // GameShop lists a game's items on sale (every game's when game is empty). With acct set, items the account already owns are marked.
@@ -494,7 +500,39 @@ func (s *Store) GameShop(ctx context.Context, acct, game string) ([]GameShopItem
 		if it.Game == nil || (game != "" && it.Game.GameID != game) || !it.Game.Deliverable || !it.onSale(now) {
 			continue
 		}
-		out = append(out, GameShopItem{Item: it.ID, Art: it.HasPreview, Game: it.Game.GameID, GameRef: it.Game.GameRef, Slot: it.Game.Slot, Name: it.Name, Price: *it.Price, Owned: it.Owned})
+		gi := GameShopItem{Item: it.ID, Art: it.HasPreview, Game: it.Game.GameID, GameRef: it.Game.GameRef, Slot: it.Game.Slot, Name: it.Name, Price: *it.Price, Owned: it.Owned}
+		if acct != "" && len(it.Game.Requires) > 0 {
+			if gi.Locked, err = missingRequirements(ctx, s.pool, acct, it.ID); err != nil {
+				return nil, err
+			}
+		}
+		out = append(out, gi)
 	}
 	return out, nil
+}
+
+// missingRequirements lists the in-game keys an item requires that the account does not hold. A key is held through an
+// owned item (granted redemption) whose game_ref is that key or whose grants contain it, or through an active base item
+// (what every player starts with).
+func missingRequirements(ctx context.Context, tx q, acct, itemID string) ([]string, error) {
+	rows, err := tx.Query(ctx, `SELECT k FROM game_items g, unnest(g.requires) AS k
+		WHERE g.item_id=$1 AND NOT EXISTS (
+			SELECT 1 FROM game_items h
+			WHERE h.game_id=g.game_id AND (h.game_ref=k OR k = ANY(h.grants)) AND (
+				EXISTS (SELECT 1 FROM redemptions r WHERE r.account_id=$2 AND r.item_id=h.item_id AND r.state='granted')
+				OR (h.origin='base' AND h.deliverable)))
+		ORDER BY k`, itemID, acct)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var k string
+		if err := rows.Scan(&k); err != nil {
+			return nil, err
+		}
+		out = append(out, k)
+	}
+	return out, rows.Err()
 }

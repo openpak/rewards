@@ -207,3 +207,55 @@ func TestGameDefaultPrice(t *testing.T) {
 		t.Errorf("id too long: %s", id)
 	}
 }
+
+func TestGameChestNeedsWhatTheGameNeeds(t *testing.T) {
+	s, _ := newStore(t)
+	ctx := context.Background()
+	res, err := s.ImportGameItems(ctx, admin, "dst", "r1", []GameItemIn{
+		{GameRef: "pack_character_wanda", Slot: "pack", Name: "Wanda", Rarity: "epic", Origin: "store", Deliverable: yes(), Grants: []string{"wanda_none", "wanda_formal"}},
+		{GameRef: "pack_wanda_nature", Slot: "pack", Name: "Wanda Nature", Rarity: "epic", Origin: "store", Deliverable: yes(), Grants: []string{"wanda_naturep"}, Requires: []string{"wanda_none"}},
+		{GameRef: "pack_wilson_x", Slot: "pack", Name: "Wilson X", Rarity: "epic", Origin: "store", Deliverable: yes()},
+		{GameRef: "wilson_gold", Slot: "skin", Name: "Wilson Gold", Rarity: "event", Origin: "event", Deliverable: yes()},
+	})
+	if err != nil || res.Created != 4 {
+		t.Fatalf("import: %+v %v", res, err)
+	}
+	ids := []string{"dst-pack-pack-character-wanda", "dst-pack-pack-wanda-nature", "dst-pack-pack-wilson-x"}
+	withArt(t, s, append(ids, "dst-skin-wilson-gold")...)
+	for _, id := range ids {
+		if err := s.SetItemState(ctx, admin, id, "active"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// What the game hands out by playing is never put on sale.
+	if err := s.SetItemState(ctx, admin, "dst-skin-wilson-gold", "active"); err == nil {
+		t.Fatal("an event item went live")
+	}
+	s.Adjust(ctx, admin, alice, 1000, "test")
+	if _, err := s.Redeem(ctx, alice, "dst-pack-pack-wanda-nature", ""); !errors.Is(err, ErrRequires) {
+		t.Fatalf("Wanda chest without Wanda: %v", err)
+	}
+	if _, err := s.Redeem(ctx, alice, "dst-pack-pack-wilson-x", ""); err != nil {
+		t.Fatalf("a chest with no requirement: %v", err)
+	}
+	if _, err := s.Redeem(ctx, alice, "dst-pack-pack-character-wanda", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Redeem(ctx, alice, "dst-pack-pack-wanda-nature", ""); err != nil {
+		t.Fatalf("Wanda chest after Wanda: %v", err)
+	}
+	// Someone else still cannot.
+	s.Adjust(ctx, admin, bob, 1000, "test")
+	if _, err := s.Redeem(ctx, bob, "dst-pack-pack-wanda-nature", ""); !errors.Is(err, ErrRequires) {
+		t.Fatalf("bob: %v", err)
+	}
+	shop, err := s.GameShop(ctx, bob, "dst")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range shop {
+		if (it.GameRef == "pack_wanda_nature") != (len(it.Locked) == 1 && it.Locked[0] == "wanda_none") {
+			t.Fatalf("locked flag wrong on %+v", it)
+		}
+	}
+}

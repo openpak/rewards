@@ -239,6 +239,14 @@ func (s *Store) SetItemState(ctx context.Context, actor, id, state string) error
 			if !ok {
 				return invalid("this item is not marked deliverable: check it in the game first")
 			}
+			// What the game gives out by playing (events, drops, loyalty, defaults) is never sold.
+			var origin string
+			if err := tx.QueryRow(ctx, `SELECT origin FROM game_items WHERE item_id=$1`, id).Scan(&origin); err != nil {
+				return err
+			}
+			if origin == "event" {
+				return invalid("this item is %s in the game and stays there: only items the game sold are listed", origin)
+			}
 			// Every item has its own picture in the shops: no art, no listing.
 			var prev int
 			if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM item_assets WHERE item_id=$1 AND role='preview'`, id).Scan(&prev); err != nil {
@@ -393,6 +401,11 @@ func (s *Store) Redeem(ctx context.Context, acct, itemID, idem string) (Redempti
 		}
 		if undeliverable {
 			return ErrNotForSale
+		}
+		if missing, err := missingRequirements(ctx, tx, acct, itemID); err != nil {
+			return err
+		} else if len(missing) > 0 {
+			return ErrRequires
 		}
 		var have int
 		if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM redemptions WHERE account_id=$1 AND item_id=$2 AND state='granted'`, acct, itemID).Scan(&have); err != nil {

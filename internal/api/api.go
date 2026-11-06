@@ -175,6 +175,8 @@ func fail(w http.ResponseWriter, err error) {
 		msg(w, 409, "sold out")
 	case errors.Is(err, store.ErrNotForSale):
 		msg(w, 409, "not for sale")
+	case errors.Is(err, store.ErrRequires):
+		msg(w, 409, "the game needs you to unlock something first (a character), as in its own shop")
 	case errors.Is(err, store.ErrConflict):
 		msg(w, 409, "conflict")
 	default:

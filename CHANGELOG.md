@@ -2,6 +2,9 @@
 
 `git log` stays the source of truth; this file is the readable summary.
 
+## v0.27.0 — 2026-11-06
+- Card #150: the game's own purchase rules. A game item carries `grants` (the in-game keys owning it gives: a DST chest's skins) and `requires` (keys the buyer must already hold: a chest with Wanda skins needs Wanda, as in the game's Shop). `Redeem` refuses with 409 `requires` until the buyer owns an item whose `game_ref` or `grants` holds each key; the shop list marks such items `locked` for that player. The admin import accepts `grants` and `requires`. Items whose origin is `event` can never be activated: what the game hands out by playing is not sold. Migration 0018.
+
 ## v0.26.0 — 2026-11-06
 - Cards #141/#148 (owner rule 2026-11-06): every game item has its own picture. A game cosmetic cannot go active without a preview in the ledger (`item_assets`, role `preview`); the art for the 806 DST items found in the game files is imported as data, not by this code.
 

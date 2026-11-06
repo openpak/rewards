@@ -233,6 +233,9 @@ func (s *Server) gameRedeem(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, store.ErrNotForSale), errors.Is(err, store.ErrSoldOut):
 		out(w, 409, map[string]any{"error": "not for sale", "code": "not_for_sale"})
 		return
+	case errors.Is(err, store.ErrRequires):
+		out(w, 409, map[string]any{"error": "the game requires something else first", "code": "requires"})
+		return
 	case err != nil:
 		fail(w, err)
 		return

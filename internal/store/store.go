@@ -27,6 +27,7 @@ var (
 	ErrOwned        = errors.New("already owned")
 	ErrSoldOut      = errors.New("sold out")
 	ErrNotForSale   = errors.New("not for sale")
+	ErrRequires     = errors.New("the game requires something else first")
 )
 
 // InvalidError is a request the caller can fix; Msg is safe to show.
