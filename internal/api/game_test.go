@@ -82,6 +82,9 @@ func TestGameShopAndRedeem(t *testing.T) {
 	if code != 200 || len(items) != 1 || items[0].(map[string]any)["game_ref"] != "pack_x" || items[0].(map[string]any)["price"] != float64(80) {
 		t.Fatalf("shop: %d %v", code, m)
 	}
+	if code, m = do(t, "GET", srv.URL+"/internal/v1/adapter/shop?namespace=wiiu&subject=1234", ev, nil); code != 200 || len(m["items"].([]any)) != 1 || m["items"].([]any)[0].(map[string]any)["game"] != "dst" {
+		t.Fatalf("all games: %d %v", code, m)
+	}
 	buy := func(extra map[string]any) (int, map[string]any) {
 		body := map[string]any{"namespace": "wiiu", "subject": "1234", "game": "dst", "game_ref": "pack_x", "trans_id": "t1"}
 		for k, v := range extra {

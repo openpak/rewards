@@ -472,6 +472,7 @@ func (s *Store) GameItemRef(ctx context.Context, game, ref string) (string, erro
 
 // GameShopItem is something a game's own shop screen may list: on sale now, deliverable, with a price in points.
 type GameShopItem struct {
+	Game    string `json:"game"`
 	GameRef string `json:"game_ref"`
 	Slot    string `json:"slot"`
 	Name    string `json:"name"`
@@ -479,7 +480,7 @@ type GameShopItem struct {
 	Owned   bool   `json:"owned,omitempty"`
 }
 
-// GameShop lists a game's items on sale. With acct set, items the account already owns are marked.
+// GameShop lists a game's items on sale (every game's when game is empty). With acct set, items the account already owns are marked.
 func (s *Store) GameShop(ctx context.Context, acct, game string) ([]GameShopItem, error) {
 	items, err := s.Catalog(ctx, acct, KindGame, "", false)
 	if err != nil {
@@ -488,10 +489,10 @@ func (s *Store) GameShop(ctx context.Context, acct, game string) ([]GameShopItem
 	now := s.Now()
 	out := []GameShopItem{}
 	for _, it := range items {
-		if it.Game == nil || it.Game.GameID != game || !it.Game.Deliverable || !it.onSale(now) {
+		if it.Game == nil || (game != "" && it.Game.GameID != game) || !it.Game.Deliverable || !it.onSale(now) {
 			continue
 		}
-		out = append(out, GameShopItem{GameRef: it.Game.GameRef, Slot: it.Game.Slot, Name: it.Name, Price: *it.Price, Owned: it.Owned})
+		out = append(out, GameShopItem{Game: it.Game.GameID, GameRef: it.Game.GameRef, Slot: it.Game.Slot, Name: it.Name, Price: *it.Price, Owned: it.Owned})
 	}
 	return out, nil
 }

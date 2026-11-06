@@ -158,15 +158,11 @@ func (s *Server) adminDeliverable(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// gameShop: GET /internal/v1/adapter/shop?game=&namespace=&subject= lists what a game's own shop may sell, with the player's points.
+// gameShop: GET /internal/v1/adapter/shop?game=&namespace=&subject= lists what a game's own shop may sell (every game's, for a console shop, when game is empty), with the player's points.
 func (s *Server) gameShop(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	acct, ok := s.gameAccount(w, r, q.Get("account"), q.Get("namespace"), q.Get("subject"))
 	if !ok {
-		return
-	}
-	if q.Get("game") == "" {
-		msg(w, 400, "game is required")
 		return
 	}
 	items, err := s.Store.GameShop(r.Context(), acct, q.Get("game"))
