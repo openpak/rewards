@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -53,6 +54,16 @@ func TestGameImportIsIdempotentAndDerivesIDs(t *testing.T) {
 	}
 }
 
+// withArt gives each item its own picture: a game item cannot go live without one.
+func withArt(t *testing.T, s *Store, ids ...string) {
+	t.Helper()
+	for _, id := range ids {
+		if _, _, err := s.PutAsset(context.Background(), admin, id, "web", "preview", "image/png", strings.NewReader("png-"+id)); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestGameCosmeticNeedsDeliverableToGoLive(t *testing.T) {
 	s, _ := newStore(t)
 	ctx := context.Background()
@@ -60,6 +71,10 @@ func TestGameCosmeticNeedsDeliverableToGoLive(t *testing.T) {
 	if err := s.SetItemState(ctx, admin, "stumble-guys-skin-skin3", "active"); err == nil {
 		t.Fatal("undeliverable item went live")
 	}
+	if err := s.SetItemState(ctx, admin, "stumble-guys-skin-skin2", "active"); err == nil {
+		t.Fatal("an item without its own picture went live")
+	}
+	withArt(t, s, "stumble-guys-skin-skin2", "stumble-guys-skin-skin3")
 	if err := s.SetItemState(ctx, admin, "stumble-guys-skin-skin2", "active"); err != nil {
 		t.Fatalf("deliverable item: %v", err)
 	}
@@ -78,6 +93,7 @@ func TestGameBuyEquipRevokeAndErase(t *testing.T) {
 	s, _ := newStore(t)
 	ctx := context.Background()
 	importDemo(t, s)
+	withArt(t, s, "stumble-guys-skin-skin1", "stumble-guys-skin-skin2", "stumble-guys-emote-emote-gg")
 	for _, id := range []string{"stumble-guys-skin-skin1", "stumble-guys-skin-skin2", "stumble-guys-emote-emote-gg"} {
 		if err := s.SetItemState(ctx, admin, id, "active"); err != nil {
 			t.Fatal(err)
