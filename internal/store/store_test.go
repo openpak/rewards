@@ -645,3 +645,17 @@ func TestMissionRewardItemGranted(t *testing.T) {
 		t.Fatal("reward item not granted")
 	}
 }
+
+func TestTotalGoingDownPullsCountedDown(t *testing.T) {
+	s, c := newStore(t)
+	ctx := context.Background()
+	s.Accrue(ctx, alice, "switch", tt("t1", 1000, 1), c.now())
+	c.add(10 * time.Minute)
+	s.Accrue(ctx, alice, "switch", tt("t1", 1600, 1), c.now()) // counts 600
+	c.add(10 * time.Minute)
+	s.Accrue(ctx, alice, "switch", tt("t1", 100, 1), c.now()) // the core dropped time it once reported
+	var counted int64
+	if err := s.pool.QueryRow(ctx, `SELECT counted_seconds FROM play_cursor WHERE account_id=$1 AND title_id='t1'`, alice).Scan(&counted); err != nil || counted != 100 {
+		t.Fatalf("counted must not lead the core's total, got %d (%v)", counted, err)
+	}
+}

@@ -2,6 +2,10 @@
 
 `git log` stays the source of truth; this file is the readable summary.
 
+## v0.27.3 — 2026-11-09
+
+- Card #170: when the core's play total for a title falls (it dropped time it once reported, e.g. a running session that expired unclosed), the cursor's `counted_seconds` is pulled down to the new total. Points already paid stay paid; the cursor just never claims more seconds than the core's history holds (dedup-check: a cache never leads the core).
+
 ## v0.27.2 -- 2026-11-06
 
 - Card #150: tests only. `TestDSTWholeCatalogueFollowsTheGamesRules` (set `REWARDS_DST_CATALOG` to klei `tools/catalog/dst-packs-import.json`) activates every chest, buys all 481 in dependency order under the requirement rule, and checks the inventory.

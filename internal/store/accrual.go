@@ -74,7 +74,10 @@ func (s *Store) Accrue(ctx context.Context, acct, ns string, entries []TitleTota
 				sess = 0
 			}
 			if res.Skipped || counted == 0 {
-				if _, err := tx.Exec(ctx, `UPDATE play_cursor SET total_seconds=$4, sessions=$5, seen_at=$6 WHERE account_id=$1 AND namespace=$2 AND title_id=$3`,
+				// A total that fell (the core dropped time it once reported, e.g. a running session that expired
+				// unclosed) also pulls the counted figure down to it: points already paid stay paid, but the cursor
+				// must never claim more seconds than the core's history holds (dedup-check: a cache never leads).
+				if _, err := tx.Exec(ctx, `UPDATE play_cursor SET total_seconds=$4, sessions=$5, seen_at=$6, counted_seconds=LEAST(counted_seconds,$4) WHERE account_id=$1 AND namespace=$2 AND title_id=$3`,
 					acct, ns, e.Title, e.Seconds, e.Sessions, now); err != nil {
 					return err
 				}
